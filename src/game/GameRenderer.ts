@@ -913,22 +913,27 @@ export class GameRenderer {
         ctx.fillText(`next window in ${minutes}:${seconds}`, boxX, boxY + 36);
       } else {
         ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
-        ctx.fillText("Arrow Keys: Turn + Thrust", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46);
-        ctx.fillText("Space: Fire", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.52);
-        ctx.fillText("P: Pause  R: Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.58);
+        ctx.fillText("Arrow Keys: Turn + Thrust", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.44);
+        ctx.fillText("Space: Fire", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5);
+        ctx.fillText(
+          "Controller: Stick/D-Pad Turn  LT/LB Thrust  A/RT Fire",
+          WORLD_WIDTH * 0.5,
+          WORLD_HEIGHT * 0.56,
+        );
+        ctx.fillText("P: Pause  R: Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.62);
 
         ctx.shadowColor = "#22d3ee";
         ctx.fillStyle = "#22d3ee";
-        ctx.fillText("A: Toggle Autopilot", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
+        ctx.fillText("A: Toggle Autopilot", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.68);
 
         ctx.shadowColor = "#a855f7";
         ctx.fillStyle = "#a855f7";
-        ctx.fillText("L: Load Replay Tape", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.7);
+        ctx.fillText("L: Load Replay Tape", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.74);
 
         ctx.shadowBlur = 10;
         ctx.shadowColor = "#4ade80";
         ctx.fillStyle = "#4ade80";
-        ctx.fillText("Press Enter or Tap to Launch", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.78);
+        ctx.fillText("Press Enter / Start or Tap to Launch", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.82);
       }
     }
 

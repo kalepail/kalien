@@ -1,6 +1,6 @@
 # Asteroids Docs Parity Checklist (AST4)
 
-Date: 2026-02-28
+Date: 2026-03-02
 
 ## Purpose
 Code-backed checklist confirming that Asteroids docs match the current TS/Rust/Worker/Contract implementation.
@@ -14,6 +14,9 @@ This is a point-in-time snapshot. Keep canonical docs updated directly; refresh 
   - `kalien-verifier/asteroids-core/src/constants.rs`
 - Gameplay rules/math:
   - `src/game/AsteroidsGame.ts`
+  - `src/game/input.ts`
+  - `src/game/input-source.ts`
+  - `src/game/gamepad.ts`
   - `src/game/constants.ts`
   - `kalien-verifier/asteroids-core/src/sim/mod.rs`
   - `kalien-verifier/asteroids-core/src/sim/game.rs`
@@ -57,12 +60,18 @@ This is a point-in-time snapshot. Keep canonical docs updated directly; refresh 
 - Prover `proof_mode` is forced from `RISC0_DEV_MODE` (not request-driven).
 - Score contract call is `submit_score(seal, journal_raw)`.
 
+7. Live input normalization
+- Live gameplay input still enters simulation only as `left/right/thrust/fire` booleans.
+- Keyboard and gamepad input are merged before simulation, and tape encoding semantics are unchanged.
+- Controller-only global actions (`Start`, `Back/View`) affect menu/pause flow only and are not serialized into tape bits.
+
 ## Docs Updated In This Pass
 - `docs/games/asteroids/README.md`
 - `docs/games/asteroids/01-GAME-SPEC.md`
 - `docs/games/asteroids/02-VERIFICATION-SPEC.md`
 - `docs/games/asteroids/04-INTEGER-MATH-SPEC.md`
 - `docs/games/asteroids/06-IMPLEMENTATION-STATUS.md`
+- `docs/games/asteroids/15-DOCS-PARITY-CHECKLIST.md`
 - `docs/archive/games/asteroids/13-ORIGINAL-RULESET-VARIANCE-AUDIT.md`
 - `docs/archive/games/asteroids/14-VARIANCE-RESOLUTION-PLAN.md`
 

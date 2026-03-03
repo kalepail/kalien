@@ -33,4 +33,11 @@ The following docs are preserved for historical context and are not canonical:
 - Files listed in Canonical Sequence are source-of-truth specs.
 - If a decision changes, update the corresponding canonical file directly.
 
+## Live Control Summary (AST4)
+
+- Keyboard gameplay input: `ArrowLeft`, `ArrowRight`, `ArrowUp`, `Space`.
+- Xbox-style controller gameplay input (Gamepad API): left stick X or d-pad (`left/right`), `LT/LB` (`thrust`), `A/RT` (`fire`).
+- Global controller actions: `Start/Menu` (start game, pause/resume), `Back/View` (return to menu).
+- Determinism rule: all live device input is normalized into the same per-frame action bits (`left`, `right`, `thrust`, `fire`).
+
 See [docs/README.md](../../README.md) for global docs policy.

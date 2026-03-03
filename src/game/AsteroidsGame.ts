@@ -43,6 +43,7 @@ import {
 } from "./constants";
 import { AudioSystem } from "./AudioSystem";
 import { Autopilot, type AutopilotConfig, type GameStateSnapshot } from "./Autopilot";
+import { pollGamepadActions } from "./gamepad";
 import {
   applyDrag,
   atan2BAM,
@@ -394,6 +395,7 @@ export class AsteroidsGame {
   }
 
   private updateFrame(timestampMs: number): void {
+    this.input.syncGamepadState(pollGamepadActions());
     this.handleGlobalInput();
 
     if (this.mode === "playing") {
@@ -475,7 +477,25 @@ export class AsteroidsGame {
   }
 
   private handleGlobalInput(): void {
-    if (this.input.consumePress("Enter")) {
+    const startPressed = this.input.consumeGamepadPress("start");
+    const enterPressed = this.input.consumePress("Enter");
+
+    if (startPressed) {
+      if (this.mode === "menu" || this.mode === "game-over") {
+        this.audio.enable();
+        this.startNewGame();
+      } else if (this.mode === "paused") {
+        this.mode = "playing";
+        this.pauseFromHidden = false;
+        this.audio.resumeMusic();
+      } else if (this.mode === "playing") {
+        this.mode = "paused";
+        this.pauseFromHidden = false;
+        this.audio.pauseMusic();
+      }
+    }
+
+    if (enterPressed) {
       if (this.mode === "menu" || this.mode === "game-over") {
         this.audio.enable();
         this.startNewGame();
@@ -490,7 +510,7 @@ export class AsteroidsGame {
       this.audio.toggleMute();
     }
 
-    if (this.input.consumePress("KeyP")) {
+    if (!startPressed && this.input.consumePress("KeyP")) {
       if (this.mode === "playing") {
         this.mode = "paused";
         this.pauseFromHidden = false;
@@ -543,7 +563,10 @@ export class AsteroidsGame {
     }
 
     // Return to menu with Escape
-    if (this.input.consumePress("Escape") && this.mode !== "menu") {
+    if (
+      (this.input.consumePress("Escape") || this.input.consumeGamepadPress("menu")) &&
+      this.mode !== "menu"
+    ) {
       this.mode = "menu";
       this.audio.stopMusic();
       this.waitingForSeed = false;

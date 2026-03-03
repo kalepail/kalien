@@ -39,10 +39,10 @@ export class LiveInputSource implements InputSource {
     const ai = this.autopilot.isEnabled() ? this.getAutopilotInput() : null;
 
     this.lastInput = {
-      left: ai ? ai.left : this.input.isDown("ArrowLeft"),
-      right: ai ? ai.right : this.input.isDown("ArrowRight"),
-      thrust: ai ? ai.thrust : this.input.isDown("ArrowUp"),
-      fire: ai ? ai.fire : this.input.isDown("Space"),
+      left: ai ? ai.left : this.input.isActionDown("left"),
+      right: ai ? ai.right : this.input.isActionDown("right"),
+      thrust: ai ? ai.thrust : this.input.isActionDown("thrust"),
+      fire: ai ? ai.fire : this.input.isActionDown("fire"),
     };
 
     return this.lastInput;
