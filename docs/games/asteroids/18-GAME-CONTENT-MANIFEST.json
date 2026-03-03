@@ -1,0 +1,853 @@
+{
+  "generated_at": "2026-03-03T03:34:23.278Z",
+  "repo_commit": "47bd408",
+  "rules_tag": 4,
+  "game_identity": {
+    "name": "Kalien",
+    "genre": "Deterministic Asteroids",
+    "core_claim": "Seeded frame-input tapes are replayed for proof and settled as claimant-bound scores on Stellar."
+  },
+  "modes": [
+    {
+      "id": "mode_menu",
+      "name": "Menu Mode",
+      "category": "I. UI / Modes / Replay",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "Main menu state for start/load flow and seed waiting.",
+      "balancing_notes": "UI-only state.",
+      "progression_role": "Run/replay entry point.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/types.ts:9 (mode enum includes menu)"
+      ],
+      "change_risk": "Medium",
+      "future_design_constraints": "Keep start transitions deterministic once gameplay begins."
+    },
+    {
+      "id": "mode_playing",
+      "name": "Playing Mode",
+      "category": "I. UI / Modes / Replay",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Active simulation and recording mode.",
+      "balancing_notes": "Main gameplay tuning state.",
+      "progression_role": "Primary run mode.",
+      "related_constants": [
+        "FIXED_TIMESTEP",
+        "MAX_GAME_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/types.ts:9 (mode enum includes playing)",
+        "src/game/AsteroidsGame.ts:294 (runtime transitions)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Preserve frame-step order and tape recording."
+    },
+    {
+      "id": "mode_paused",
+      "name": "Paused Mode",
+      "category": "I. UI / Modes / Replay",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "Pause state for runtime and visibility changes.",
+      "balancing_notes": "No tape semantic impact.",
+      "progression_role": "Session control.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:293 (paused branch handling)"
+      ],
+      "change_risk": "Low",
+      "future_design_constraints": "Keep edge-triggered pause behavior."
+    },
+    {
+      "id": "mode_game_over",
+      "name": "Game Over Mode",
+      "category": "I. UI / Modes / Replay",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Terminal state after life exhaustion or run cap.",
+      "balancing_notes": "Defines final score boundary.",
+      "progression_role": "Run termination.",
+      "related_constants": [
+        "MAX_GAME_FRAMES",
+        "STARTING_LIVES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:458 (terminal transition)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep terminal conditions aligned with replay/proof flow."
+    },
+    {
+      "id": "mode_replay",
+      "name": "Replay Mode",
+      "category": "I. UI / Modes / Replay",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Visual replay from tape bytes with speed/pause controls.",
+      "balancing_notes": "Replay controls are non-scoring.",
+      "progression_role": "Post-run inspection mode.",
+      "related_constants": [
+        "RULES_TAG"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:1673 (loadReplay sets replay mode)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep replay visual-only for claim path."
+    }
+  ],
+  "player_actions": [
+    {
+      "id": "action_left",
+      "name": "Turn Left",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Left input bit rotates ship left.",
+      "balancing_notes": "Core handling control.",
+      "progression_role": "Primary movement verb.",
+      "related_constants": [
+        "SHIP_TURN_SPEED_BAM"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:19 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:968 (simulation read)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Must stay encoded in the four-bit input model."
+    },
+    {
+      "id": "action_right",
+      "name": "Turn Right",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Right input bit rotates ship right.",
+      "balancing_notes": "Core handling control.",
+      "progression_role": "Primary movement verb.",
+      "related_constants": [
+        "SHIP_TURN_SPEED_BAM"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:20 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:969 (simulation read)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Must stay encoded in the four-bit input model."
+    },
+    {
+      "id": "action_thrust",
+      "name": "Thrust",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Thrust input bit accelerates ship velocity.",
+      "balancing_notes": "Bounded by drag and max speed.",
+      "progression_role": "Primary movement verb.",
+      "related_constants": [
+        "SHIP_THRUST_Q8_8",
+        "SHIP_MAX_SPEED_Q8_8"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:21 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:970 (simulation read)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Must stay encoded in the four-bit input model."
+    },
+    {
+      "id": "action_fire",
+      "name": "Fire",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Fire input bit edge-triggers shot creation with cooldown/cap checks.",
+      "balancing_notes": "Fire latch + cooldown curb autofire.",
+      "progression_role": "Primary offensive verb.",
+      "related_constants": [
+        "SHIP_BULLET_LIMIT",
+        "SHIP_BULLET_COOLDOWN_FRAMES"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:22 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:278 (fire edge logic)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Preserve latch and cooldown semantics."
+    },
+    {
+      "id": "action_keyboard_controls",
+      "name": "Keyboard Controls",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "ArrowLeft/ArrowRight/ArrowUp/Space map to core gameplay actions.",
+      "balancing_notes": "Reference control path.",
+      "progression_role": "Default live input path.",
+      "related_constants": [],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/input.ts:2 (keyboard mapping list)"
+      ],
+      "change_risk": "Medium",
+      "future_design_constraints": "Keep key mapping in sync with docs and UI."
+    },
+    {
+      "id": "action_xbox_controller",
+      "name": "Xbox Controller Mapping",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Gamepad polling maps stick/dpad/buttons into existing action booleans.",
+      "balancing_notes": "0.25 deadzone avoids twitch turns.",
+      "progression_role": "Alternative live input device.",
+      "related_constants": [],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/gamepad.ts:3 (deadzone)",
+        "src/game/input.ts:132 (merged state)",
+        "docs/games/asteroids/README.md:44 (canonical docs)"
+      ],
+      "change_risk": "Medium",
+      "future_design_constraints": "Controller-only global actions must not alter tape bits."
+    }
+  ],
+  "entities": [
+    {
+      "id": "entity_ship",
+      "name": "Player Ship",
+      "category": "B. Entities",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Single controllable ship with deterministic respawn + invulnerability timers.",
+      "balancing_notes": "Lives and respawn safety shape survival.",
+      "progression_role": "Player avatar.",
+      "related_constants": [
+        "SHIP_RESPAWN_FRAMES",
+        "SHIP_SPAWN_INVULNERABLE_FRAMES",
+        "STARTING_LIVES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/types.ts:33 (ship type)",
+        "src/game/AsteroidsGame.ts:744 (ship creation)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Preserve deterministic spawn logic."
+    },
+    {
+      "id": "entity_asteroid_sizes",
+      "name": "Asteroid Size Chain",
+      "category": "B. Entities",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Asteroids split large -> medium -> small and then are removed.",
+      "balancing_notes": "Split density drives pressure.",
+      "progression_role": "Wave core hazard ladder.",
+      "related_constants": [
+        "SCORE_LARGE_ASTEROID",
+        "SCORE_MEDIUM_ASTEROID",
+        "SCORE_SMALL_ASTEROID"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/types.ts:11 (size enum)",
+        "src/game/AsteroidsGame.ts:1481 (split chain)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep split ordering and cap checks deterministic."
+    },
+    {
+      "id": "weapon_ship_bullets",
+      "name": "Ship Bullets",
+      "category": "D. Weapons / Attacks",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Player bullets are cap-limited and lifetime-limited.",
+      "balancing_notes": "Cap and cooldown prevent sustained spam.",
+      "progression_role": "Primary kill/scoring tool.",
+      "related_constants": [
+        "SHIP_BULLET_LIMIT",
+        "SHIP_BULLET_LIFETIME_FRAMES",
+        "SHIP_BULLET_COOLDOWN_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:28 (ship bullet cap)",
+        "src/game/AsteroidsGame.ts:1080 (ship bullet life)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Do not bypass cap/cooldown/latch checks."
+    },
+    {
+      "id": "weapon_saucer_bullets",
+      "name": "Saucer Bullets",
+      "category": "D. Weapons / Attacks",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Saucer bullets are cap-limited and lifetime-limited.",
+      "balancing_notes": "Crossfire ceiling prevents runaway density.",
+      "progression_role": "Enemy offensive channel.",
+      "related_constants": [
+        "SAUCER_BULLET_LIMIT",
+        "SAUCER_BULLET_LIFETIME_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:12 (saucer bullet cap)",
+        "src/game/AsteroidsGame.ts:1290 (saucer bullet life)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep cap and cooldown deterministic."
+    }
+  ],
+  "enemies": [
+    {
+      "id": "entity_asteroid_sizes",
+      "name": "Asteroid Size Chain",
+      "category": "B. Entities",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Asteroids split large -> medium -> small and then are removed.",
+      "balancing_notes": "Split density drives pressure.",
+      "progression_role": "Wave core hazard ladder.",
+      "related_constants": [
+        "SCORE_LARGE_ASTEROID",
+        "SCORE_MEDIUM_ASTEROID",
+        "SCORE_SMALL_ASTEROID"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/types.ts:11 (size enum)",
+        "src/game/AsteroidsGame.ts:1481 (split chain)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep split ordering and cap checks deterministic."
+    },
+    {
+      "id": "enemy_saucers",
+      "name": "Saucer Variants",
+      "category": "C. Enemies",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Large and small saucers spawn with pressure-scaled cadence and aim.",
+      "balancing_notes": "Small saucers are high-risk/high-reward.",
+      "progression_role": "Secondary enemy pressure channel.",
+      "related_constants": [
+        "SCORE_LARGE_SAUCER",
+        "SCORE_SMALL_SAUCER",
+        "SAUCER_BULLET_LIMIT"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:101 (wave concurrency)",
+        "src/game/AsteroidsGame.ts:1155 (small saucer aim)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep pressure function deterministic and mirrored in verifier core."
+    }
+  ],
+  "weapons": [
+    {
+      "id": "weapon_ship_bullets",
+      "name": "Ship Bullets",
+      "category": "D. Weapons / Attacks",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Player bullets are cap-limited and lifetime-limited.",
+      "balancing_notes": "Cap and cooldown prevent sustained spam.",
+      "progression_role": "Primary kill/scoring tool.",
+      "related_constants": [
+        "SHIP_BULLET_LIMIT",
+        "SHIP_BULLET_LIFETIME_FRAMES",
+        "SHIP_BULLET_COOLDOWN_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:28 (ship bullet cap)",
+        "src/game/AsteroidsGame.ts:1080 (ship bullet life)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Do not bypass cap/cooldown/latch checks."
+    },
+    {
+      "id": "weapon_saucer_bullets",
+      "name": "Saucer Bullets",
+      "category": "D. Weapons / Attacks",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Saucer bullets are cap-limited and lifetime-limited.",
+      "balancing_notes": "Crossfire ceiling prevents runaway density.",
+      "progression_role": "Enemy offensive channel.",
+      "related_constants": [
+        "SAUCER_BULLET_LIMIT",
+        "SAUCER_BULLET_LIFETIME_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:12 (saucer bullet cap)",
+        "src/game/AsteroidsGame.ts:1290 (saucer bullet life)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep cap and cooldown deterministic."
+    }
+  ],
+  "progression": {
+    "summary": "Wave-driven asteroid pacing with pressure-scaled saucer threat.",
+    "wave_model": "Waves increment and large asteroid count ramps 4,6,8,10 then +1 to cap 16.",
+    "anti_lurk": "After 360 frames without asteroid kills, anti-lurk pressure accelerates saucer behavior.",
+    "saucer_pressure": "Wave+lurk pressure compresses saucer cooldown windows and small-saucer aim error.",
+    "evidence_refs": [
+      "src/game/AsteroidsGame.ts:94",
+      "src/game/AsteroidsGame.ts:234"
+    ]
+  },
+  "scoring": {
+    "summary": "Scoring comes from asteroid/saucer destruction and grants extra lives every 10,000 points.",
+    "score_bands": {
+      "asteroid_large": 20,
+      "asteroid_medium": 50,
+      "asteroid_small": 100,
+      "saucer_large": 200,
+      "saucer_small": 990
+    },
+    "extra_life_step": 10000,
+    "evidence_refs": [
+      "src/game/constants.ts:37",
+      "src/game/AsteroidsGame.ts:204"
+    ]
+  },
+  "session_constraints": {
+    "max_game_frames": 36000,
+    "fixed_timestep_hz": 60,
+    "requires_seed_and_seed_id_for_claim": true,
+    "deterministic_constants": {
+      "RULES_TAG": 4,
+      "MAX_GAME_FRAMES": 36000,
+      "STARTING_LIVES": 3,
+      "EXTRA_LIFE_SCORE_STEP": 10000,
+      "SHIP_BULLET_LIMIT": 4,
+      "SAUCER_BULLET_LIMIT": 2,
+      "SHIP_RESPAWN_FRAMES": 75,
+      "SHIP_SPAWN_INVULNERABLE_FRAMES": 120,
+      "LURK_TIME_THRESHOLD_FRAMES": 360,
+      "LURK_SAUCER_SPAWN_FAST_FRAMES": 180
+    },
+    "evidence_refs": [
+      "src/game/constants.ts:65",
+      "worker/api/routes-proofs.ts:309",
+      "kalien-contract/contracts/asteroids_score/src/lib.rs:125"
+    ]
+  },
+  "determinism_critical": [
+    {
+      "id": "action_left",
+      "name": "Turn Left",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Left input bit rotates ship left.",
+      "balancing_notes": "Core handling control.",
+      "progression_role": "Primary movement verb.",
+      "related_constants": [
+        "SHIP_TURN_SPEED_BAM"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:19 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:968 (simulation read)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Must stay encoded in the four-bit input model."
+    },
+    {
+      "id": "action_right",
+      "name": "Turn Right",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Right input bit rotates ship right.",
+      "balancing_notes": "Core handling control.",
+      "progression_role": "Primary movement verb.",
+      "related_constants": [
+        "SHIP_TURN_SPEED_BAM"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:20 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:969 (simulation read)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Must stay encoded in the four-bit input model."
+    },
+    {
+      "id": "action_thrust",
+      "name": "Thrust",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Thrust input bit accelerates ship velocity.",
+      "balancing_notes": "Bounded by drag and max speed.",
+      "progression_role": "Primary movement verb.",
+      "related_constants": [
+        "SHIP_THRUST_Q8_8",
+        "SHIP_MAX_SPEED_Q8_8"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:21 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:970 (simulation read)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Must stay encoded in the four-bit input model."
+    },
+    {
+      "id": "action_fire",
+      "name": "Fire",
+      "category": "A. Core Mechanics",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Fire input bit edge-triggers shot creation with cooldown/cap checks.",
+      "balancing_notes": "Fire latch + cooldown curb autofire.",
+      "progression_role": "Primary offensive verb.",
+      "related_constants": [
+        "SHIP_BULLET_LIMIT",
+        "SHIP_BULLET_COOLDOWN_FRAMES"
+      ],
+      "related_tests": [
+        "tests/src/gamepad-input.test.ts"
+      ],
+      "evidence_refs": [
+        "src/game/tape.ts:22 (tape bit mapping)",
+        "src/game/AsteroidsGame.ts:278 (fire edge logic)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Preserve latch and cooldown semantics."
+    },
+    {
+      "id": "progress_wave_system",
+      "name": "Wave Progression",
+      "category": "F. Progression / Pressure / Pacing",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Wave count increments and large asteroid count ramps to cap 16.",
+      "balancing_notes": "Primary difficulty curve.",
+      "progression_role": "Pacing backbone.",
+      "related_constants": [
+        "ASTEROID_CAP"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:94 (wave function)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Maintain deterministic wave spawn curve."
+    },
+    {
+      "id": "progress_anti_lurk",
+      "name": "Anti-Lurk Pressure",
+      "category": "F. Progression / Pressure / Pacing",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "timeSinceLastKill raises saucer pressure after 360 frames.",
+      "balancing_notes": "Punishes passive play.",
+      "progression_role": "Secondary pacing accelerator.",
+      "related_constants": [
+        "LURK_TIME_THRESHOLD_FRAMES",
+        "LURK_SAUCER_SPAWN_FAST_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/AsteroidsGame.ts:234 (anti-lurk timer)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep thresholds deterministic."
+    },
+    {
+      "id": "progress_extra_lives",
+      "name": "Extra Lives",
+      "category": "E. Scoring / Rewards",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Starting lives are 3; each 10,000 points grants one extra life.",
+      "balancing_notes": "Survival reward loop.",
+      "progression_role": "Run extension reward.",
+      "related_constants": [
+        "STARTING_LIVES",
+        "EXTRA_LIFE_SCORE_STEP"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/constants.ts:8 (start lives)",
+        "src/game/AsteroidsGame.ts:204 (extra life threshold)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Keep threshold logic deterministic."
+    },
+    {
+      "id": "session_hard_cap",
+      "name": "Hard Run Cap",
+      "category": "G. Session Conditions",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Run ends at MAX_GAME_FRAMES (36,000 frames, ~10 minutes at 60 FPS).",
+      "balancing_notes": "Controls proving cost/time ceiling.",
+      "progression_role": "Hard session boundary.",
+      "related_constants": [
+        "MAX_GAME_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/constants.ts:65 (cap constant)",
+        "src/game/AsteroidsGame.ts:699 (cap enforcement)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Changing cap requires changelog + docs + cost review."
+    },
+    {
+      "id": "system_score_claim_flow",
+      "name": "Score Claim Flow",
+      "category": "H. Determinism / Verification",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Proof jobs require seed_id+claimant and relay submit_score(seal,journal_raw).",
+      "balancing_notes": "Only improved claimant/seed scores mint rewards.",
+      "progression_role": "On-chain settlement.",
+      "related_constants": [
+        "RULES_DIGEST"
+      ],
+      "related_tests": [
+        "tests/worker/queue-consumer.test.ts"
+      ],
+      "evidence_refs": [
+        "worker/api/routes-proofs.ts:309 (proof query requirement)",
+        "kalien-contract/contracts/asteroids_score/src/lib.rs:125 (contract submit)"
+      ],
+      "change_risk": "Critical",
+      "future_design_constraints": "No bypass of claimant/seed and journal digest checks."
+    }
+  ],
+  "non_consensus_cosmetics": [
+    {
+      "id": "cosmetic_gamepad_rumble",
+      "name": "Gamepad Rumble",
+      "category": "J. Presentation / Cosmetic",
+      "status": "Implemented",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "Optional Gamepad API rumble effects on fire/ship-loss/extra-life.",
+      "balancing_notes": "No gameplay-state effect.",
+      "progression_role": "Feedback-only presentation.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [
+        "src/game/gamepad.ts:80",
+        "src/game/AsteroidsGame.ts:1087"
+      ],
+      "change_risk": "Low",
+      "future_design_constraints": "Keep non-consensus."
+    }
+  ],
+  "explicit_omissions": [
+    {
+      "id": "omission_hyperspace",
+      "name": "Hyperspace",
+      "category": "L. Archived / Planned / Removed",
+      "status": "Absent",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "Hyperspace is explicitly omitted in AST4.",
+      "balancing_notes": "Keeps control and proof surface small.",
+      "progression_role": "Explicit omission.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [
+        "docs/games/asteroids/01-GAME-SPEC.md:75 (explicit omission)",
+        "docs/archive/games/asteroids/13-ORIGINAL-RULESET-VARIANCE-AUDIT.md:27 (archive note)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Would require deterministic rules and docs updates if added."
+    },
+    {
+      "id": "omission_bosses",
+      "name": "Bosses",
+      "category": "L. Archived / Planned / Removed",
+      "status": "Absent",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "No boss system exists in current AST4 gameplay.",
+      "balancing_notes": "Current pacing uses waves+saucers, not boss gates.",
+      "progression_role": "Explicit omission.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [],
+      "change_risk": "Medium",
+      "future_design_constraints": "Adding bosses requires full inventory/docs/test pass."
+    },
+    {
+      "id": "omission_powerups",
+      "name": "Powerups and Pickups",
+      "category": "L. Archived / Planned / Removed",
+      "status": "Absent",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "No powerup or pickup entities are implemented.",
+      "balancing_notes": "Current score model is destruction-only.",
+      "progression_role": "Explicit omission.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [],
+      "change_risk": "Medium",
+      "future_design_constraints": "If added, define deterministic spawn/pickup rules first."
+    },
+    {
+      "id": "omission_shields",
+      "name": "Shield Mechanics",
+      "category": "L. Archived / Planned / Removed",
+      "status": "Absent",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "No shield resource/action; only fixed spawn invulnerability timer exists.",
+      "balancing_notes": "Avoid conflating invulnerability timer with shield feature.",
+      "progression_role": "Explicit omission.",
+      "related_constants": [
+        "SHIP_SPAWN_INVULNERABLE_FRAMES"
+      ],
+      "related_tests": [],
+      "evidence_refs": [],
+      "change_risk": "Medium",
+      "future_design_constraints": "Document separately if shield systems are introduced."
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "unknown_hidden_menus",
+      "name": "Hidden Menus",
+      "category": "M. Unknown / Needs Verification",
+      "status": "Unknown",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "No hidden menu flow is evident in audited gameplay paths.",
+      "balancing_notes": "N/A.",
+      "progression_role": "N/A.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [],
+      "change_risk": "Low",
+      "future_design_constraints": "If hidden flows are added, classify and document them."
+    },
+    {
+      "id": "unknown_secret_lore",
+      "name": "Secret Lore or Easter Eggs",
+      "category": "M. Unknown / Needs Verification",
+      "status": "Unknown",
+      "player_visible": true,
+      "determinism_critical": false,
+      "current_behavior_summary": "No dedicated lore registry is visible in core gameplay files.",
+      "balancing_notes": "N/A.",
+      "progression_role": "N/A.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [],
+      "change_risk": "Low",
+      "future_design_constraints": "Keep lore optional and non-consensus."
+    }
+  ],
+  "archived_or_planned": [
+    {
+      "id": "planned_classic_hyperspace_profile",
+      "name": "Classic Profile with Hyperspace",
+      "category": "L. Archived / Planned / Removed",
+      "status": "Planned",
+      "player_visible": true,
+      "determinism_critical": true,
+      "current_behavior_summary": "Archived variance notes suggest a classic profile including hyperspace.",
+      "balancing_notes": "Would widen rules and proof surface significantly.",
+      "progression_role": "Deferred design branch.",
+      "related_constants": [],
+      "related_tests": [],
+      "evidence_refs": [
+        "docs/archive/games/asteroids/13-ORIGINAL-RULESET-VARIANCE-AUDIT.md:100 (archived recommendation)"
+      ],
+      "change_risk": "High",
+      "future_design_constraints": "Remain planned-only until code exists."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_4bit_input",
+      "file": "src/game/tape.ts",
+      "line": 19,
+      "note": "Four-bit action contract"
+    },
+    {
+      "id": "ev_run_cap",
+      "file": "src/game/constants.ts",
+      "line": 65,
+      "note": "10-minute cap"
+    },
+    {
+      "id": "ev_claim_path",
+      "file": "kalien-contract/contracts/asteroids_score/src/lib.rs",
+      "line": 125,
+      "note": "On-chain claim entrypoint"
+    }
+  ]
+}

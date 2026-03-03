@@ -19,6 +19,11 @@ ZK/Stellar integration.
 | `10-PROOF-GATEWAY-SPEC.md` | Cloudflare Worker + prover gateway behavior and API contract |
 | `12-GUEST-OPTIMIZATION.md` | RISC0 guest and proving optimization notes |
 | `15-DOCS-PARITY-CHECKLIST.md` | Latest docs parity checklist (dated; refresh when implementation changes) |
+| `16-GAME-CONTENT-INVENTORY.md` | Evidence-backed gameplay inventory (implemented/absent/unknown) |
+| `17-GAME-MANUAL.md` | Player-facing old-school gameplay manual |
+| `18-GAME-CONTENT-MANIFEST.json` | Machine-readable gameplay manifest for agent/tooling use |
+| `19-FUTURE-DESIGN-GUARDRAILS.md` | Rules for safely extending gameplay systems |
+| `20-GAME-CONTENT-CHANGELOG.md` | Append-only gameplay-content change log |
 
 ## Legacy Context (Archived)
 
