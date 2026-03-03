@@ -5,6 +5,7 @@ Branch: `feat/xbox-controller-support`
 
 ## Summary
 Added Xbox-style gamepad support to live Asteroids play by polling the browser Gamepad API each frame and normalizing state into the existing deterministic action model (`left`, `right`, `thrust`, `fire`).
+This pass also adds replay-mode controller shortcuts and optional controller rumble feedback.
 
 Keyboard controls remain unchanged and continue to work in parallel (`keyboard OR controller`).
 
@@ -26,21 +27,25 @@ Keyboard controls remain unchanged and continue to work in parallel (`keyboard O
 - `A` or `RT` -> `fire`
 - `Start/Menu` -> start game / pause / resume (mode-dependent global action)
 - `Back/View` -> return to menu
+- Replay controls: `X=1x`, `Y=2x`, `B=4x`, `A/Start=pause`
 
 ## Gamepad API Constraints
 - Uses polling (`navigator.getGamepads()`) once per animation frame.
 - Uses edge detection for one-shot controller actions (`start`, `menu`) to avoid repeated triggers while held.
 - Replay/tape format is unchanged. Controller input is only a live-input source mapped to existing booleans.
+- Optional gamepad rumble uses browser Gamepad vibration APIs when available; unsupported implementations are ignored safely.
 
 ## Test Evidence
 - `bun test tests/src/gamepad-input.test.ts`
-  - 6 passing tests:
+  - 8 passing tests:
     - deadzone behavior
     - left/right mapping (stick + d-pad)
     - fire/thrust/start/menu mapping
+    - replay shortcut button mapping
     - keyboard press semantics unchanged
     - keyboard+controller held-state merge
     - gamepad press edge semantics
+    - replay shortcut edge semantics
 - `bun run typecheck` fails at pre-existing `typegen:check` (`worker-configuration.d.ts` out of date)
   - with regenerated worker types, app/node/worker/script typechecks pass
 - `bun run lint` passed
@@ -51,6 +56,3 @@ Not executed in this shell session (no browser/controller hardware attached).
 
 ## Follow-up Ideas (Deferred)
 - In-game rebinding UI for controller mappings.
-- Optional haptics feedback for fire/explosions.
-- Controller glyphs/tooltips in HUD/menu.
-- Replay-mode controller shortcuts.

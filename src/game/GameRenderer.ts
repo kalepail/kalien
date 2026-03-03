@@ -933,14 +933,22 @@ export class GameRenderer {
         ctx.shadowBlur = 10;
         ctx.shadowColor = "#4ade80";
         ctx.fillStyle = "#4ade80";
-        ctx.fillText("Press Enter / Start or Tap to Launch", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.82);
+        ctx.fillText(
+          "Press Enter / Start or Tap to Launch",
+          WORLD_WIDTH * 0.5,
+          WORLD_HEIGHT * 0.82,
+        );
       }
     }
 
     if (state.mode === "paused") {
       ctx.fillText("PAUSED", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.45);
       ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
-      ctx.fillText("Press P / Enter or Tap to Resume", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.66);
+      ctx.fillText(
+        "Press P / Enter / Start or Tap to Resume",
+        WORLD_WIDTH * 0.5,
+        WORLD_HEIGHT * 0.66,
+      );
     }
 
     if (state.mode === "game-over") {
@@ -954,7 +962,11 @@ export class GameRenderer {
         WORLD_WIDTH * 0.5,
         WORLD_HEIGHT * 0.56,
       );
-      ctx.fillText("Press Enter, R, or Tap to Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
+      ctx.fillText(
+        "Press Enter, R, Start, or Tap to Restart",
+        WORLD_WIDTH * 0.5,
+        WORLD_HEIGHT * 0.64,
+      );
 
       ctx.shadowColor = "#a855f7";
       ctx.fillStyle = "#a855f7";
@@ -1016,7 +1028,7 @@ export class GameRenderer {
       ctx.fillStyle = "#4ade80";
       ctx.shadowBlur = 10;
       ctx.shadowColor = "#4ade80";
-      ctx.fillText("Press Esc to Exit", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.76);
+      ctx.fillText("Press Esc / View to Exit", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.76);
 
       ctx.restore();
       return;
@@ -1057,6 +1069,11 @@ export class GameRenderer {
     ctx.font = "500 12px 'Monaspace Krypton', monospace";
     ctx.fillStyle = "#6b7280";
     ctx.textAlign = "center";
+    ctx.fillText(
+      "Controller: X=1x  Y=2x  B=4x  A/Start=Pause  View=Exit",
+      WORLD_WIDTH / 2,
+      WORLD_HEIGHT - 34,
+    );
     ctx.fillText("1/2/4: Speed    Space: Pause    Esc: Exit", WORLD_WIDTH / 2, WORLD_HEIGHT - 20);
 
     ctx.restore();

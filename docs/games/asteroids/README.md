@@ -38,6 +38,8 @@ The following docs are preserved for historical context and are not canonical:
 - Keyboard gameplay input: `ArrowLeft`, `ArrowRight`, `ArrowUp`, `Space`.
 - Xbox-style controller gameplay input (Gamepad API): left stick X or d-pad (`left/right`), `LT/LB` (`thrust`), `A/RT` (`fire`).
 - Global controller actions: `Start/Menu` (start game, pause/resume), `Back/View` (return to menu).
+- Replay controller shortcuts: `X=1x`, `Y=2x`, `B=4x`, `A/Start=pause`.
+- Optional controller rumble feedback on ship fire, ship destruction, and extra life.
 - Determinism rule: all live device input is normalized into the same per-frame action bits (`left`, `right`, `thrust`, `fire`).
 
 See [docs/README.md](../../README.md) for global docs policy.

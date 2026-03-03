@@ -16,7 +16,17 @@ const GAME_KEYS = new Set([
   "KeyM", // Mute toggle
 ]);
 
-const GAMEPAD_ACTIONS = ["left", "right", "thrust", "fire", "start", "menu"] as const;
+const GAMEPAD_ACTIONS = [
+  "left",
+  "right",
+  "thrust",
+  "fire",
+  "start",
+  "menu",
+  "replaySpeed1",
+  "replaySpeed2",
+  "replaySpeed4",
+] as const;
 
 export type GamepadAction = (typeof GAMEPAD_ACTIONS)[number];
 export type GameplayAction = "left" | "right" | "thrust" | "fire";

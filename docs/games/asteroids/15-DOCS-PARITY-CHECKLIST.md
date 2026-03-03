@@ -64,6 +64,11 @@ This is a point-in-time snapshot. Keep canonical docs updated directly; refresh 
 - Live gameplay input still enters simulation only as `left/right/thrust/fire` booleans.
 - Keyboard and gamepad input are merged before simulation, and tape encoding semantics are unchanged.
 - Controller-only global actions (`Start`, `Back/View`) affect menu/pause flow only and are not serialized into tape bits.
+- Replay shortcut buttons (`X/Y/B/A/Start`) map to replay controls only and do not alter tape semantics.
+
+8. Controller haptics (cosmetic)
+- Browser gamepad rumble calls are optional runtime effects in interactive mode only.
+- Haptic effects are outside simulation state and do not influence deterministic replay, tape bytes, verifier behavior, or score outcomes.
 
 ## Docs Updated In This Pass
 - `docs/games/asteroids/README.md`

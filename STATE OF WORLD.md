@@ -21,13 +21,14 @@
   - `worker-configuration.d.ts` out of date (`wrangler types --check` fails)
 
 ## Final Snapshot
-- Date/time: 2026-03-02T20:32:26.8115075-06:00
+- Date/time: 2026-03-02T20:50:34.0314779-06:00
 - Branch: `feat/xbox-controller-support`
 - Controller support implementation complete in `src/game` input path.
 - Deterministic tape/replay contract unchanged.
+- Deferred pass complete: replay-mode controller shortcuts + optional controller rumble + expanded controller HUD hints.
 
 ## Validation Runbook (Final)
-- `bun test tests/src/gamepad-input.test.ts`: pass (6 tests)
+- `bun test tests/src/gamepad-input.test.ts`: pass (8 tests)
 - `bun run lint`: pass
 - `bun run typecheck`: fail at pre-existing `typegen:check` gate when `worker-configuration.d.ts` is not regenerated
 - `bun run check`: not fully passable in this environment without unrelated repo churn:

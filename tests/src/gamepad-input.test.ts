@@ -65,6 +65,13 @@ describe("readGamepadActions", () => {
     expect(actions.start).toBe(true);
     expect(actions.menu).toBe(true);
   });
+
+  it("maps replay shortcut buttons", () => {
+    const actions = readGamepadActions([makeGamepad({ pressedButtons: [2, 3, 1] })], 0.25);
+    expect(actions.replaySpeed1).toBe(true);
+    expect(actions.replaySpeed2).toBe(true);
+    expect(actions.replaySpeed4).toBe(true);
+  });
 });
 
 describe("InputController gamepad integration", () => {
@@ -102,5 +109,12 @@ describe("InputController gamepad integration", () => {
     input.syncGamepadState({ start: false });
     input.syncGamepadState({ start: true });
     expect(input.consumeGamepadPress("start")).toBe(true);
+  });
+
+  it("tracks replay shortcut button edges", () => {
+    const input = new InputController();
+    input.syncGamepadState({ replaySpeed2: true });
+    expect(input.consumeGamepadPress("replaySpeed2")).toBe(true);
+    expect(input.consumeGamepadPress("replaySpeed2")).toBe(false);
   });
 });

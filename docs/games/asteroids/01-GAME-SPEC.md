@@ -16,6 +16,8 @@ Game state transitions must be deterministic given:
   - `A` or `RT` -> `fire`
   - `Start` -> menu start/resume/pause action (UI/global only, not tape bit)
   - `Back/View` -> return-to-menu action (UI/global only, not tape bit)
+  - replay-only shortcuts: `X=1x`, `Y=2x`, `B=4x`, `A/Start=pause`
+- Optional controller haptics may be emitted in interactive mode; they are cosmetic and not part of deterministic replay state.
 
 ## Core Mechanics
 ### Ship
