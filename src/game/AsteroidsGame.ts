@@ -394,6 +394,7 @@ export class AsteroidsGame {
   }
 
   private updateFrame(timestampMs: number): void {
+    this.input.pollGamepad();
     this.handleGlobalInput();
 
     if (this.mode === "playing") {
