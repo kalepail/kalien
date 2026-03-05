@@ -27,6 +27,10 @@ export function ControlsHint({ className }: { className?: string }) {
         <Kbd>D</Kbd> save tape
         <Sep />
         <Kbd>Esc</Kbd> menu
+        <Sep />
+        Xbox: LS/D-pad turn, LT/LB thrust, A/RT fire, Start pause, View menu
+        <Sep />
+        Replay pad: X/Y/B speed, A/Start pause
       </p>
 
       {/* Mobile: simplified hint */}

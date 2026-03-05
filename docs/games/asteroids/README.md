@@ -19,6 +19,11 @@ ZK/Stellar integration.
 | `10-PROOF-GATEWAY-SPEC.md` | Cloudflare Worker + prover gateway behavior and API contract |
 | `12-GUEST-OPTIMIZATION.md` | RISC0 guest and proving optimization notes |
 | `15-DOCS-PARITY-CHECKLIST.md` | Latest docs parity checklist (dated; refresh when implementation changes) |
+| `16-GAME-CONTENT-INVENTORY.md` | Evidence-backed gameplay inventory (implemented/absent/unknown) |
+| `17-GAME-MANUAL.md` | Player-facing old-school gameplay manual |
+| `18-GAME-CONTENT-MANIFEST.json` | Machine-readable gameplay manifest for agent/tooling use |
+| `19-FUTURE-DESIGN-GUARDRAILS.md` | Rules for safely extending gameplay systems |
+| `20-GAME-CONTENT-CHANGELOG.md` | Append-only gameplay-content change log |
 
 ## Legacy Context (Archived)
 
@@ -32,5 +37,14 @@ The following docs are preserved for historical context and are not canonical:
 
 - Files listed in Canonical Sequence are source-of-truth specs.
 - If a decision changes, update the corresponding canonical file directly.
+
+## Live Control Summary (AST4)
+
+- Keyboard gameplay input: `ArrowLeft`, `ArrowRight`, `ArrowUp`, `Space`.
+- Xbox-style controller gameplay input (Gamepad API): left stick X or d-pad (`left/right`), `LT/LB` (`thrust`), `A/RT` (`fire`).
+- Global controller actions: `Start/Menu` (start game, pause/resume), `Back/View` (return to menu).
+- Replay controller shortcuts: `X=1x`, `Y=2x`, `B=4x`, `A/Start=pause`.
+- Optional controller rumble feedback on ship fire, ship destruction, and extra life.
+- Determinism rule: all live device input is normalized into the same per-frame action bits (`left`, `right`, `thrust`, `fire`).
 
 See [docs/README.md](../../README.md) for global docs policy.

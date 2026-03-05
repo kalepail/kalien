@@ -913,29 +913,42 @@ export class GameRenderer {
         ctx.fillText(`next window in ${minutes}:${seconds}`, boxX, boxY + 36);
       } else {
         ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
-        ctx.fillText("Arrow Keys: Turn + Thrust", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46);
-        ctx.fillText("Space: Fire", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.52);
-        ctx.fillText("P: Pause  R: Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.58);
+        ctx.fillText("Arrow Keys: Turn + Thrust", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.44);
+        ctx.fillText("Space: Fire", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5);
+        ctx.fillText(
+          "Controller: Stick/D-Pad Turn  LT/LB Thrust  A/RT Fire",
+          WORLD_WIDTH * 0.5,
+          WORLD_HEIGHT * 0.56,
+        );
+        ctx.fillText("P: Pause  R: Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.62);
 
         ctx.shadowColor = "#22d3ee";
         ctx.fillStyle = "#22d3ee";
-        ctx.fillText("A: Toggle Autopilot", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
+        ctx.fillText("A: Toggle Autopilot", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.68);
 
         ctx.shadowColor = "#a855f7";
         ctx.fillStyle = "#a855f7";
-        ctx.fillText("L: Load Replay Tape", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.7);
+        ctx.fillText("L: Load Replay Tape", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.74);
 
         ctx.shadowBlur = 10;
         ctx.shadowColor = "#4ade80";
         ctx.fillStyle = "#4ade80";
-        ctx.fillText("Press Enter or Tap to Launch", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.78);
+        ctx.fillText(
+          "Press Enter / Start or Tap to Launch",
+          WORLD_WIDTH * 0.5,
+          WORLD_HEIGHT * 0.82,
+        );
       }
     }
 
     if (state.mode === "paused") {
       ctx.fillText("PAUSED", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.45);
       ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
-      ctx.fillText("Press P / Enter or Tap to Resume", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.66);
+      ctx.fillText(
+        "Press P / Enter / Start or Tap to Resume",
+        WORLD_WIDTH * 0.5,
+        WORLD_HEIGHT * 0.66,
+      );
     }
 
     if (state.mode === "game-over") {
@@ -949,7 +962,11 @@ export class GameRenderer {
         WORLD_WIDTH * 0.5,
         WORLD_HEIGHT * 0.56,
       );
-      ctx.fillText("Press Enter, R, or Tap to Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
+      ctx.fillText(
+        "Press Enter, R, Start, or Tap to Restart",
+        WORLD_WIDTH * 0.5,
+        WORLD_HEIGHT * 0.64,
+      );
 
       ctx.shadowColor = "#a855f7";
       ctx.fillStyle = "#a855f7";
@@ -1011,7 +1028,7 @@ export class GameRenderer {
       ctx.fillStyle = "#4ade80";
       ctx.shadowBlur = 10;
       ctx.shadowColor = "#4ade80";
-      ctx.fillText("Press Esc to Exit", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.76);
+      ctx.fillText("Press Esc / View to Exit", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.76);
 
       ctx.restore();
       return;
@@ -1052,6 +1069,11 @@ export class GameRenderer {
     ctx.font = "500 12px 'Monaspace Krypton', monospace";
     ctx.fillStyle = "#6b7280";
     ctx.textAlign = "center";
+    ctx.fillText(
+      "Controller: X=1x  Y=2x  B=4x  A/Start=Pause  View=Exit",
+      WORLD_WIDTH / 2,
+      WORLD_HEIGHT - 34,
+    );
     ctx.fillText("1/2/4: Speed    Space: Pause    Esc: Exit", WORLD_WIDTH / 2, WORLD_HEIGHT - 20);
 
     ctx.restore();

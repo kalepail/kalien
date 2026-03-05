@@ -43,6 +43,7 @@ import {
 } from "./constants";
 import { AudioSystem } from "./AudioSystem";
 import { Autopilot, type AutopilotConfig, type GameStateSnapshot } from "./Autopilot";
+import { pollGamepadActions, pulseConnectedGamepads } from "./gamepad";
 import {
   applyDrag,
   atan2BAM,
@@ -394,6 +395,7 @@ export class AsteroidsGame {
   }
 
   private updateFrame(timestampMs: number): void {
+    this.input.syncGamepadState(pollGamepadActions());
     this.handleGlobalInput();
 
     if (this.mode === "playing") {
@@ -475,7 +477,25 @@ export class AsteroidsGame {
   }
 
   private handleGlobalInput(): void {
-    if (this.input.consumePress("Enter")) {
+    const startPressed = this.input.consumeGamepadPress("start");
+    const enterPressed = this.input.consumePress("Enter");
+
+    if (startPressed) {
+      if (this.mode === "menu" || this.mode === "game-over") {
+        this.audio.enable();
+        this.startNewGame();
+      } else if (this.mode === "paused") {
+        this.mode = "playing";
+        this.pauseFromHidden = false;
+        this.audio.resumeMusic();
+      } else if (this.mode === "playing") {
+        this.mode = "paused";
+        this.pauseFromHidden = false;
+        this.audio.pauseMusic();
+      }
+    }
+
+    if (enterPressed) {
       if (this.mode === "menu" || this.mode === "game-over") {
         this.audio.enable();
         this.startNewGame();
@@ -490,7 +510,7 @@ export class AsteroidsGame {
       this.audio.toggleMute();
     }
 
-    if (this.input.consumePress("KeyP")) {
+    if (!startPressed && this.input.consumePress("KeyP")) {
       if (this.mode === "playing") {
         this.mode = "paused";
         this.pauseFromHidden = false;
@@ -522,19 +542,23 @@ export class AsteroidsGame {
 
     // Replay speed controls
     if (this.mode === "replay") {
-      if (this.input.consumePress("Digit1")) {
+      if (this.input.consumePress("Digit1") || this.input.consumeGamepadPress("replaySpeed1")) {
         this.replaySpeed = 1;
         this.accumulator = 0;
       }
-      if (this.input.consumePress("Digit2")) {
+      if (this.input.consumePress("Digit2") || this.input.consumeGamepadPress("replaySpeed2")) {
         this.replaySpeed = 2;
         this.accumulator = 0;
       }
-      if (this.input.consumePress("Digit4")) {
+      if (this.input.consumePress("Digit4") || this.input.consumeGamepadPress("replaySpeed4")) {
         this.replaySpeed = 4;
         this.accumulator = 0;
       }
-      if (this.input.consumePress("Space")) {
+      if (
+        this.input.consumePress("Space") ||
+        this.input.consumeGamepadPress("fire") ||
+        startPressed
+      ) {
         this.replayPaused = !this.replayPaused;
         // Reset timing to avoid accumulator jump after unpause
         this.lastTimeMs = 0;
@@ -543,7 +567,10 @@ export class AsteroidsGame {
     }
 
     // Return to menu with Escape
-    if (this.input.consumePress("Escape") && this.mode !== "menu") {
+    if (
+      (this.input.consumePress("Escape") || this.input.consumeGamepadPress("menu")) &&
+      this.mode !== "menu"
+    ) {
       this.mode = "menu";
       this.audio.stopMusic();
       this.waitingForSeed = false;
@@ -1057,6 +1084,7 @@ export class AsteroidsGame {
     this.bullets.push(bullet);
     if (this.renderer) {
       this.audio.playShoot();
+      pulseConnectedGamepads(18, 0.3, 0.08);
       const { dx: mfDx, dy: mfDy } = displaceQ12_4(ship.angle, ship.radius + 8);
       this.renderer.onBulletFired(fromQ12_4(ship.x + mfDx), fromQ12_4(ship.y + mfDy));
     }
@@ -1476,6 +1504,7 @@ export class AsteroidsGame {
       this.renderer.onShipDestroyed(px, py);
       this.renderer.addScreenShake(SHAKE_INTENSITY_LARGE);
       this.audio.playExplosion("large");
+      pulseConnectedGamepads(120, 1, 0.45);
     }
 
     if (this.lives <= 0) {
@@ -1502,6 +1531,7 @@ export class AsteroidsGame {
       if (this.renderer) {
         this.audio.playExtraLife();
         this.renderer.onExtraLife();
+        pulseConnectedGamepads(80, 0.45, 0.85);
       }
     }
 

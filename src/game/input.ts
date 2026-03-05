@@ -16,20 +16,53 @@ const GAME_KEYS = new Set([
   "KeyM", // Mute toggle
 ]);
 
+const GAMEPAD_ACTIONS = [
+  "left",
+  "right",
+  "thrust",
+  "fire",
+  "start",
+  "menu",
+  "replaySpeed1",
+  "replaySpeed2",
+  "replaySpeed4",
+] as const;
+
+export type GamepadAction = (typeof GAMEPAD_ACTIONS)[number];
+export type GameplayAction = "left" | "right" | "thrust" | "fire";
+
+const GAMEPLAY_ACTION_KEYCODES: Record<GameplayAction, string> = {
+  left: "ArrowLeft",
+  right: "ArrowRight",
+  thrust: "ArrowUp",
+  fire: "Space",
+};
+
 function isEditableTarget(target: EventTarget | null): boolean {
+  if (typeof Element === "undefined") {
+    return false;
+  }
+
   if (!(target instanceof Element)) {
     return false;
   }
 
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+  if (
+    (typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement) ||
+    (typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement)
+  ) {
     return true;
   }
 
-  if (target instanceof HTMLSelectElement) {
+  if (typeof HTMLSelectElement !== "undefined" && target instanceof HTMLSelectElement) {
     return true;
   }
 
-  if (target instanceof HTMLElement && target.isContentEditable) {
+  if (
+    typeof HTMLElement !== "undefined" &&
+    target instanceof HTMLElement &&
+    target.isContentEditable
+  ) {
     return true;
   }
 
@@ -39,6 +72,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export class InputController {
   private readonly down = new Set<string>();
   private readonly pressed = new Set<string>();
+  private readonly gamepadDown = new Set<GamepadAction>();
+  private readonly gamepadPressed = new Set<GamepadAction>();
 
   handleKeyDown(event: KeyboardEvent): void {
     if (!GAME_KEYS.has(event.code)) {
@@ -78,18 +113,48 @@ export class InputController {
     return this.down.has(code);
   }
 
+  isActionDown(action: GameplayAction): boolean {
+    return this.down.has(GAMEPLAY_ACTION_KEYCODES[action]) || this.gamepadDown.has(action);
+  }
+
   consumePress(code: string): boolean {
     const wasPressed = this.pressed.has(code);
     this.pressed.delete(code);
     return wasPressed;
   }
 
+  consumeGamepadPress(action: GamepadAction): boolean {
+    const wasPressed = this.gamepadPressed.has(action);
+    this.gamepadPressed.delete(action);
+    return wasPressed;
+  }
+
+  syncGamepadState(state: Partial<Record<GamepadAction, boolean>>): void {
+    for (const action of GAMEPAD_ACTIONS) {
+      const isDown = state[action] === true;
+      const wasDown = this.gamepadDown.has(action);
+
+      if (isDown && !wasDown) {
+        this.gamepadPressed.add(action);
+      }
+
+      if (isDown) {
+        this.gamepadDown.add(action);
+      } else {
+        this.gamepadDown.delete(action);
+      }
+    }
+  }
+
   clearPressed(): void {
     this.pressed.clear();
+    this.gamepadPressed.clear();
   }
 
   reset(): void {
     this.down.clear();
     this.pressed.clear();
+    this.gamepadDown.clear();
+    this.gamepadPressed.clear();
   }
 }

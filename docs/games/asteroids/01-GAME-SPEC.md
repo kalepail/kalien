@@ -9,6 +9,15 @@ Game state transitions must be deterministic given:
 ## Input Model
 - 4 action bits per frame: `left`, `right`, `thrust`, `fire`.
 - High nibble reserved and must be zero.
+- Live controls (keyboard/gamepad) must normalize into these same 4 bits before simulation.
+- Xbox-style controller mapping for live play:
+  - left stick X or d-pad left/right -> `left` / `right`
+  - `LT` or `LB` -> `thrust`
+  - `A` or `RT` -> `fire`
+  - `Start` -> menu start/resume/pause action (UI/global only, not tape bit)
+  - `Back/View` -> return-to-menu action (UI/global only, not tape bit)
+  - replay-only shortcuts: `X=1x`, `Y=2x`, `B=4x`, `A/Start=pause`
+- Optional controller haptics may be emitted in interactive mode; they are cosmetic and not part of deterministic replay state.
 
 ## Core Mechanics
 ### Ship
