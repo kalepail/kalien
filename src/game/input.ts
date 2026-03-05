@@ -38,8 +38,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 // Xbox controller button index → key code mapping (Standard Gamepad API layout)
 const GAMEPAD_BUTTON_MAP: Array<[number, string]> = [
-  [0, "Space"],      // A → Fire
   [1, "Escape"],     // B → Return to menu
+  [6, "ArrowUp"],    // LT → Ignition (thrust)
+  [7, "Space"],      // RT → Fire
   [9, "Enter"],      // Start → Start / resume / pause
   [12, "ArrowUp"],   // D-Pad Up → Thrust
   [14, "ArrowLeft"], // D-Pad Left → Turn left
