@@ -480,6 +480,10 @@ export class AsteroidsGame {
       if (this.mode === "menu" || this.mode === "game-over") {
         this.audio.enable();
         this.startNewGame();
+      } else if (this.mode === "playing") {
+        this.mode = "paused";
+        this.pauseFromHidden = false;
+        this.audio.pauseMusic();
       } else if (this.mode === "paused") {
         this.mode = "playing";
         this.pauseFromHidden = false;
