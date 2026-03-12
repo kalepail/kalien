@@ -13,6 +13,7 @@
  * Requirements:
  *   - Local dev server running: bun dev
  *   - .dev.vars configured with BOUNDLESS_PRIVATE_KEY
+ *   - Playwright Chromium installed: bunx playwright-core install chromium
  *
  * Usage: bun scripts/e2e-ui.ts [--headed] [--tape <path>] [--timeout-ms <ms>]
  */
@@ -45,6 +46,21 @@ function log(msg: string) {
 
 function step(n: number, msg: string) {
   console.log(`\n[e2e-ui] ── Step ${n}: ${msg} ──`);
+}
+
+async function launchChromiumBrowser(headless: boolean) {
+  try {
+    return await chromium.launch({
+      headless,
+      args: ["--no-sandbox"],
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `failed to launch Playwright Chromium; install it with "bunx playwright-core install chromium" and retry (${detail})`,
+      { cause: error },
+    );
+  }
 }
 
 /** Generate a fresh tape with a unique seed so we never hit "already claimed". */
@@ -161,10 +177,7 @@ async function main() {
 
   // Step 1: Launch browser
   step(1, "Launch browser");
-  const browser = await chromium.launch({
-    headless: !headed,
-    args: ["--no-sandbox"],
-  });
+  const browser = await launchChromiumBrowser(!headed);
 
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
