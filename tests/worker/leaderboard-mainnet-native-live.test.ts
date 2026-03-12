@@ -16,8 +16,7 @@ import { fetchLeaderboardEventsFromGalexie } from "../../worker/leaderboard-inge
 import type { WorkerEnv } from "../../worker/env";
 
 const RUN_LIVE = Bun.env.RUN_MAINNET_NATIVE_INGESTION_LIVE === "1";
-const MAINNET_SHORT_RPC =
-  Bun.env.MAINNET_SHORT_RPC_URL ?? "https://rpc-pro.lightsail.network/";
+const MAINNET_SHORT_RPC = Bun.env.MAINNET_SHORT_RPC_URL ?? "https://rpc-pro.lightsail.network/";
 const MAINNET_ARCHIVE_RPC =
   Bun.env.MAINNET_ARCHIVE_RPC_URL ?? "https://archive-rpc-pro.lightsail.network/";
 const MAINNET_PASSPHRASE = "Public Global Stellar Network ; September 2015";
@@ -102,7 +101,8 @@ async function fetchRawContractEventsCount(
   const payload = (await response.json()) as {
     result?: { events?: unknown[] };
   };
-  return Array.isArray(payload.result?.events) ? payload.result!.events!.length : 0;
+  const events = payload.result?.events;
+  return Array.isArray(events) ? events.length : 0;
 }
 
 function makeEnv(rpcUrl: string): WorkerEnv {

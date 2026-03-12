@@ -1,4 +1,7 @@
-import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
+import {
+  startAuthentication,
+  type PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
 import type { ClaimStatus } from "@/proof/api";
 import { fetchWithTimeout as baseFetchWithTimeout, parseJson } from "@/lib/api";
 
@@ -203,7 +206,6 @@ export async function updateLeaderboardProfile(
   const optionsData = await parseJson<LeaderboardProfileAuthOptionsResponse>(optionsResponse);
 
   // Step 2: Sign with passkey via browser WebAuthn API
-  const { startAuthentication } = await import("@simplewebauthn/browser");
   const authResponse = await startAuthentication({
     optionsJSON: optionsData.options,
   });

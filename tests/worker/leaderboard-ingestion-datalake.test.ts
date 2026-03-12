@@ -65,8 +65,7 @@ describe("datalake ingestion object-key behavior", () => {
     expect(
       urls.some(
         (url) =>
-          url.includes("/v1/FFFFFFFD--2.xdr.zstd") ||
-          url.includes("/v1/FFFFFFFD--2.xdr.zst"),
+          url.includes("/v1/FFFFFFFD--2.xdr.zstd") || url.includes("/v1/FFFFFFFD--2.xdr.zst"),
       ),
     ).toBe(true);
     expect(urls.some((url) => url.includes("--2-2.xdr."))).toBe(false);

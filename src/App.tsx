@@ -1,40 +1,13 @@
-import { lazy, Suspense } from "react";
+import { GamePageWrapper } from "./components/game/GamePageWrapper";
+import { LeaderboardPage } from "./components/leaderboard/LeaderboardPage";
+import { ProofsPage } from "./components/proofs/ProofsPage";
+import { PublicProofsPage } from "./components/proofs/PublicProofsPage";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
 import { useLocation } from "./hooks/useLocation";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
-import { SuspenseFallback } from "./components/shared/SuspenseFallback";
+import { WalletPage } from "./components/wallet/WalletPage";
 import { WalletProvider } from "./contexts/WalletContext";
-
-const LazyLeaderboardPage = lazy(() =>
-  import("./components/leaderboard/LeaderboardPage").then((m) => ({
-    default: m.LeaderboardPage,
-  })),
-);
-
-const LazyProofsPage = lazy(() =>
-  import("./components/proofs/ProofsPage").then((m) => ({
-    default: m.ProofsPage,
-  })),
-);
-
-const LazyPublicProofsPage = lazy(() =>
-  import("./components/proofs/PublicProofsPage").then((m) => ({
-    default: m.PublicProofsPage,
-  })),
-);
-
-const LazyGamePage = lazy(() =>
-  import("./components/game/GamePageWrapper").then((m) => ({
-    default: m.GamePageWrapper,
-  })),
-);
-
-const LazyWalletPage = lazy(() =>
-  import("./components/wallet/WalletPage").then((m) => ({
-    default: m.WalletPage,
-  })),
-);
 
 function App() {
   const pathname = useLocation();
@@ -44,39 +17,27 @@ function App() {
       <SiteHeader />
       {pathname.startsWith("/leaderboard") ? (
         <ErrorBoundary key={pathname}>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LazyLeaderboardPage />
-          </Suspense>
+          <LeaderboardPage />
         </ErrorBoundary>
       ) : pathname === "/proofs" ? (
         <ErrorBoundary key={pathname}>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LazyProofsPage />
-          </Suspense>
+          <ProofsPage />
         </ErrorBoundary>
       ) : pathname.startsWith("/proofs/") ? (
         <ErrorBoundary key={pathname}>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LazyPublicProofsPage />
-          </Suspense>
+          <PublicProofsPage />
         </ErrorBoundary>
       ) : pathname === "/wallet" ? (
         <ErrorBoundary key={pathname}>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LazyWalletPage />
-          </Suspense>
+          <WalletPage />
         </ErrorBoundary>
       ) : pathname.startsWith("/replay/") ? (
         <ErrorBoundary key={pathname}>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LazyGamePage />
-          </Suspense>
+          <GamePageWrapper />
         </ErrorBoundary>
       ) : (
         <ErrorBoundary key={pathname}>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LazyGamePage />
-          </Suspense>
+          <GamePageWrapper />
         </ErrorBoundary>
       )}
       <SiteFooter />

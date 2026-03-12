@@ -16,8 +16,10 @@
 import {
   createPublicClient,
   createWalletClient,
+  formatUnits,
   hashTypedData,
   http,
+  parseUnits,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -27,21 +29,11 @@ import { Address, xdr } from "@stellar/stellar-sdk";
 import { encodeStdin } from "../worker/boundless/stdin";
 import { boundlessMarketAbi, eip712Types } from "../worker/boundless/abi";
 import type { ProofRequest } from "../worker/boundless/types";
-import {
-  buildProofArtifactV4,
-  parseProofArtifactV4,
-} from "../worker/proof-artifact";
+import { buildProofArtifactV4, parseProofArtifactV4 } from "../worker/proof-artifact";
 import { parseAndValidateTape } from "../worker/tape";
-import {
-  DEFAULT_BINDINGS_RPC_URL,
-  DEFAULT_MAX_TAPE_BYTES,
-} from "../worker/constants";
-import { fetchEthPriceUsd, usdToWei } from "../worker/boundless/pricing";
-import {
-  packJournalRaw,
-  unpackJournalRaw,
-  JOURNAL_LEN,
-} from "../shared/stellar/journal";
+import { DEFAULT_BINDINGS_RPC_URL, DEFAULT_MAX_TAPE_BYTES } from "../worker/constants";
+import { resolveUsdOfferToWei } from "../worker/boundless/pricing";
+import { packJournalRaw, unpackJournalRaw, JOURNAL_LEN } from "../shared/stellar/journal";
 import { Client as ScoreContractClient } from "asteroids-score";
 import { ChannelsClient } from "@openzeppelin/relayer-plugin-channels/dist/client";
 import { AsteroidsGame } from "../src/game/AsteroidsGame";
@@ -63,9 +55,7 @@ const claimOnly = requestIdArg !== null;
 
 // ── Validate secrets ──────────────────────────────────────────────────────
 if (!claimOnly && (!env.BOUNDLESS_PRIVATE_KEY || !env.PINATA_JWT)) {
-  console.error(
-    "Missing BOUNDLESS_PRIVATE_KEY or PINATA_JWT in scripts/.env, .dev.vars, or .env",
-  );
+  console.error("Missing BOUNDLESS_PRIVATE_KEY or PINATA_JWT in scripts/.env, .dev.vars, or .env");
   process.exit(1);
 }
 if (!env.RELAYER_API_KEY) {
@@ -88,15 +78,22 @@ const RAW_IMAGE_ID = (
   env.PROVER_EXPECTED_IMAGE_ID ??
   "0x37dfd7b9ca6490f5db1e9cd4dfa5ceadae573e44c6fd351e9cdc2cb7138b8111"
 ).toLowerCase();
-const IMAGE_ID = RAW_IMAGE_ID.startsWith("0x")
-  ? RAW_IMAGE_ID
-  : `0x${RAW_IMAGE_ID}`;
+const IMAGE_ID = RAW_IMAGE_ID.startsWith("0x") ? RAW_IMAGE_ID : `0x${RAW_IMAGE_ID}`;
 
 // Groth16V3_0 selector — explicitly request Groth16 proofs for Stellar
 const GROTH16_SELECTOR = "0x73c457ba" as const;
 
-const MAX_PRICE_USD = 0.02; // $0.02 — resolved to wei at submission via Chainlink
-const MIN_PRICE_USD = 0.0002; // ~1% of max — auction floor
+const MAX_PRICE_USD = 0.1; // $0.10 — resolved to wei at submission via Chainlink
+const MIN_PRICE_USD = 0; // zero floor — let the auction float from 0 up to max price
+const LOCK_COLLATERAL_ZKC = env.BOUNDLESS_LOCK_COLLATERAL_ZKC?.trim() || "5";
+const LOCK_COLLATERAL_BASE_UNITS = (() => {
+  if (!LOCK_COLLATERAL_ZKC) return parseUnits("5", 18);
+  try {
+    return parseUnits(LOCK_COLLATERAL_ZKC, 18);
+  } catch {
+    return parseUnits("5", 18);
+  }
+})();
 const TOP_UP_BUFFER_BPS = (() => {
   const raw = env.BOUNDLESS_TOP_UP_BUFFER_BPS?.trim();
   if (!raw) return 1500;
@@ -124,9 +121,7 @@ const STELLAR_NETWORK_PASSPHRASE =
 const STELLAR_RPC_URL = DEFAULT_BINDINGS_RPC_URL;
 const RELAYER_URL = "https://channels.openzeppelin.com/testnet";
 const CLAIMANT_ADDRESS =
-  claimantArg ??
-  env.CLAIMANT_ADDRESS ??
-  "CDPAHIOTDASW6WULHAJ5UL4H6YH7OJ2T72LKVT75SCFDZ4YZTOVDFEQX";
+  claimantArg ?? env.CLAIMANT_ADDRESS ?? "CDPAHIOTDASW6WULHAJ5UL4H6YH7OJ2T72LKVT75SCFDZ4YZTOVDFEQX";
 const scoreClient = new ScoreContractClient({
   contractId: SCORE_CONTRACT_ID,
   rpcUrl: STELLAR_RPC_URL,
@@ -160,6 +155,19 @@ function hexToBytes(hex: string): Uint8Array {
   for (let i = 0; i < bytes.length; i++)
     bytes[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
   return bytes;
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hexPairsToBytes(hex: string): Uint8Array {
+  const pairs = hex.match(/.{2}/g);
+  if (!pairs) {
+    return new Uint8Array();
+  }
+
+  return new Uint8Array(pairs.map((pair) => Number.parseInt(pair, 16)));
 }
 
 /** Generate a fresh tape using the headless autopilot. */
@@ -215,10 +223,8 @@ function parseFulfillmentFromEventData(
   data: string,
 ): { seal: Uint8Array; journal: Uint8Array } | null {
   const clean = data.startsWith("0x") ? data.slice(2) : data;
-  const readWordAt = (charOffset: number) =>
-    clean.slice(charOffset, charOffset + 64);
-  const readUintAt = (charOffset: number) =>
-    Number.parseInt(readWordAt(charOffset), 16);
+  const readWordAt = (charOffset: number) => clean.slice(charOffset, charOffset + 64);
+  const readUintAt = (charOffset: number) => Number.parseInt(readWordAt(charOffset), 16);
 
   // Outer: offset to Fulfillment tuple
   const tupleByteOffset = readUintAt(0);
@@ -232,9 +238,7 @@ function parseFulfillmentFromEventData(
   // Read seal: length-prefixed bytes at sealByteOffset from tuple start
   const sealLenPos = t + sealByteOffset * 2;
   const sealLen = readUintAt(sealLenPos);
-  const seal = hexToBytes(
-    clean.slice(sealLenPos + 64, sealLenPos + 64 + sealLen * 2),
-  );
+  const seal = hexToBytes(clean.slice(sealLenPos + 64, sealLenPos + 64 + sealLen * 2));
 
   if (fulfillmentDataType !== 1) {
     console.error(
@@ -260,10 +264,7 @@ function parseFulfillmentFromEventData(
     16,
   );
   const journal = hexToBytes(
-    innerHex.slice(
-      journalByteOffset * 2 + 64,
-      journalByteOffset * 2 + 64 + journalLen * 2,
-    ),
+    innerHex.slice(journalByteOffset * 2 + 64, journalByteOffset * 2 + 64 + journalLen * 2),
   );
 
   return { seal, journal };
@@ -289,9 +290,7 @@ if (claimOnly) {
     args: [requestId],
   });
   if (!fulfilled) {
-    console.error(
-      "  Request is NOT fulfilled. Use full mode to submit a new request.",
-    );
+    console.error("  Request is NOT fulfilled. Use full mode to submit a new request.");
     process.exit(1);
   }
   console.log("  Confirmed: request is fulfilled on-chain\n");
@@ -302,17 +301,30 @@ if (claimOnly) {
   const account = privateKeyToAccount(PRIVATE_KEY as `0x${string}`);
 
   // Resolve USD pricing to wei via Chainlink ETH/USD feed
-  const ethPriceUsd = await fetchEthPriceUsd(RPC_URL, Number(CHAIN_ID));
-  const minPrice = usdToWei(MIN_PRICE_USD, ethPriceUsd);
-  const maxPrice = usdToWei(MAX_PRICE_USD, ethPriceUsd);
+  const {
+    ethPriceUsd,
+    minPriceWei: minPrice,
+    maxPriceWei: maxPrice,
+  } = await resolveUsdOfferToWei({
+    rpcUrl: RPC_URL,
+    chainId: Number(CHAIN_ID),
+    minPriceUsd: MIN_PRICE_USD,
+    maxPriceUsd: MAX_PRICE_USD,
+  });
 
   console.log("=== Boundless → Stellar E2E Test ===\n");
   console.log("Wallet:", account.address);
   console.log("Contract:", MARKET_ADDRESS);
   console.log("Selector:", GROTH16_SELECTOR, "(Groth16V3_0)");
-  console.log(`ETH price: $${ethPriceUsd.toFixed(2)}`);
+  console.log(`ETH price: ${ethPriceUsd === null ? "not needed" : `$${ethPriceUsd.toFixed(2)}`}`);
   console.log(
     `Price: $${MIN_PRICE_USD} → $${MAX_PRICE_USD} (${formatEth(minPrice)} → ${formatEth(maxPrice)} ETH)`,
+  );
+  console.log(
+    `Lock collateral: ${LOCK_COLLATERAL_BASE_UNITS.toString()} base units (${formatUnits(
+      LOCK_COLLATERAL_BASE_UNITS,
+      18,
+    )} ZKC)`,
   );
   console.log(
     `Auction: ${FLAT_PERIOD_SEC / 60}m flat + ${RAMP_PERIOD_SEC / 60}m ramp + ${(LOCK_TIMEOUT_SEC - RAMP_PERIOD_SEC) / 60}m lock + ${(TIMEOUT_SEC - LOCK_TIMEOUT_SEC) / 60}m expiry = ${(FLAT_PERIOD_SEC + TIMEOUT_SEC) / 60}m total`,
@@ -340,10 +352,7 @@ if (claimOnly) {
   });
   console.log(`  Stdin: ${stdinBytes.length} bytes`);
 
-  const hashBuffer = await crypto.subtle.digest(
-    "SHA-256",
-    new Uint8Array(stdinBytes),
-  );
+  const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(stdinBytes));
   const hashHex = Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -359,14 +368,11 @@ if (claimOnly) {
   );
   formData.append("pinataMetadata", JSON.stringify({ name: filename }));
 
-  const pinataResp = await fetch(
-    "https://api.pinata.cloud/pinning/pinFileToIPFS",
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${PINATA_JWT}` },
-      body: formData,
-    },
-  );
+  const pinataResp = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${PINATA_JWT}` },
+    body: formData,
+  });
 
   if (!pinataResp.ok) {
     const err = await pinataResp.text().catch(() => "");
@@ -406,10 +412,7 @@ if (claimOnly) {
     claimant: CLAIMANT_ADDRESS,
   });
   const journalDigest = new Uint8Array(
-    await crypto.subtle.digest(
-      "SHA-256",
-      expectedJournal as unknown as BufferSource,
-    ),
+    await crypto.subtle.digest("SHA-256", expectedJournal as unknown as BufferSource),
   );
   // DigestMatch data = abi.encodePacked(imageId, sha256(journal)) = 64 bytes
   const imageIdBytes = hexToBytes(IMAGE_ID);
@@ -446,7 +449,7 @@ if (claimOnly) {
       rampUpPeriod: RAMP_PERIOD_SEC,
       lockTimeout: LOCK_TIMEOUT_SEC,
       timeout: TIMEOUT_SEC,
-      lockCollateral: 0n,
+      lockCollateral: LOCK_COLLATERAL_BASE_UNITS,
     },
   };
 
@@ -486,9 +489,7 @@ if (claimOnly) {
     if (marketBalanceBeforeWei < maxPrice) {
       const deficitWei = maxPrice - marketBalanceBeforeWei;
       const bufferWei =
-        TOP_UP_BUFFER_BPS > 0
-          ? (deficitWei * BigInt(TOP_UP_BUFFER_BPS) + 9_999n) / 10_000n
-          : 0n;
+        TOP_UP_BUFFER_BPS > 0 ? (deficitWei * BigInt(TOP_UP_BUFFER_BPS) + 9_999n) / 10_000n : 0n;
       autoDepositWei = deficitWei + bufferWei;
       if (autoDepositWei > 0n) {
         const depositTxHash = await walletClient.writeContract({
@@ -498,9 +499,7 @@ if (claimOnly) {
           args: [],
           value: autoDepositWei,
         });
-        console.log(
-          `  Deposited ${formatEth(autoDepositWei)} ETH to market (${depositTxHash})`,
-        );
+        console.log(`  Deposited ${formatEth(autoDepositWei)} ETH to market (${depositTxHash})`);
       }
     }
   } catch (error) {
@@ -570,7 +569,7 @@ if (claimOnly) {
           rampUpPeriod: proofRequest.offer.rampUpPeriod,
           lockTimeout: proofRequest.offer.lockTimeout,
           timeout: proofRequest.offer.timeout,
-          lockCollateral: "0x0",
+          lockCollateral: `0x${proofRequest.offer.lockCollateral.toString(16)}`,
         },
       },
       request_digest: requestDigest,
@@ -607,6 +606,7 @@ if (claimOnly) {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let attempt = 0;
 
+  /* eslint-disable no-await-in-loop -- polling and retry backoff must remain sequential */
   while (Date.now() < deadline) {
     attempt++;
     const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
@@ -629,9 +629,7 @@ if (claimOnly) {
 
       console.log("running");
     } catch (e) {
-      console.log(
-        `error: ${(e instanceof Error ? e.message : String(e)).slice(0, 80)}`,
-      );
+      console.log(`error: ${(e instanceof Error ? e.message : String(e)).slice(0, 80)}`);
     }
 
     if (Date.now() + POLL_INTERVAL_MS > deadline) {
@@ -641,8 +639,9 @@ if (claimOnly) {
       process.exit(1);
     }
 
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await sleepMs(POLL_INTERVAL_MS);
   }
+  /* eslint-enable no-await-in-loop */
 }
 
 // ── Step 4: Fetch ProofDelivered event (with retries) ────────────────────
@@ -654,11 +653,8 @@ let journal: Uint8Array | null = null;
 
 const requestIdTopic = `0x${requestId.toString(16).padStart(64, "0")}` as Hex;
 
-for (
-  let eventAttempt = 1;
-  eventAttempt <= EVENT_FETCH_RETRIES;
-  eventAttempt++
-) {
+/* eslint-disable no-await-in-loop -- event fetch retries must remain sequential */
+for (let eventAttempt = 1; eventAttempt <= EVENT_FETCH_RETRIES; eventAttempt++) {
   try {
     const currentBlock = await publicClient.getBlockNumber();
     // BlastAPI ignores topic filters, returns ALL contract events.
@@ -679,8 +675,7 @@ for (
       const topic0 = log.topics?.[0]?.toLowerCase();
       const topic1 = log.topics?.[1]?.toLowerCase();
       return (
-        topic0 === PROOF_DELIVERED_TOPIC.toLowerCase() &&
-        topic1 === requestIdTopic.toLowerCase()
+        topic0 === PROOF_DELIVERED_TOPIC.toLowerCase() && topic1 === requestIdTopic.toLowerCase()
       );
     });
 
@@ -705,17 +700,17 @@ for (
     );
   }
 
-  if (eventAttempt < EVENT_FETCH_RETRIES)
-    await new Promise((r) => setTimeout(r, EVENT_FETCH_BACKOFF_MS));
+  if (eventAttempt < EVENT_FETCH_RETRIES) {
+    await sleepMs(EVENT_FETCH_BACKOFF_MS);
+  }
 }
+/* eslint-enable no-await-in-loop */
 
 if (!seal || !journal) {
   console.error(
     `\n  FAILED: Could not fetch ProofDelivered event after ${EVENT_FETCH_RETRIES} attempts.`,
   );
-  console.error(
-    "  The proof was fulfilled on-chain but we couldn't retrieve the event data.",
-  );
+  console.error("  The proof was fulfilled on-chain but we couldn't retrieve the event data.");
   console.error("  Try again with:");
   console.error(
     `  bun run scripts/test-boundless-submit.ts --request-id 0x${requestId.toString(16)}`,
@@ -728,12 +723,8 @@ console.log("\nStep 5: Validating proof data...");
 
 // Seal: 260 bytes = 4-byte selector + 256-byte Groth16 proof
 if (seal.length !== 260) {
-  console.error(
-    `  FAIL: seal is ${seal.length} bytes (expected 260 for Groth16)`,
-  );
-  console.error(
-    "  This likely means the prover delivered a non-Groth16 proof.",
-  );
+  console.error(`  FAIL: seal is ${seal.length} bytes (expected 260 for Groth16)`);
+  console.error("  This likely means the prover delivered a non-Groth16 proof.");
   console.error("  Ensure the request uses selector 0x73c457ba (Groth16V3_0).");
   process.exit(1);
 }
@@ -742,17 +733,13 @@ const selectorHex = `0x${Array.from(seal.slice(0, 4))
   .join("")}`;
 console.log(`  Seal: ${seal.length} bytes, selector: ${selectorHex}`);
 if (selectorHex !== GROTH16_SELECTOR) {
-  console.error(
-    `  FAIL: selector ${selectorHex} !== ${GROTH16_SELECTOR} (Groth16V3_0)`,
-  );
+  console.error(`  FAIL: selector ${selectorHex} !== ${GROTH16_SELECTOR} (Groth16V3_0)`);
   process.exit(1);
 }
 
 // Journal: fixed 49-byte format.
 if (journal.length !== JOURNAL_LEN) {
-  console.error(
-    `  FAIL: journal is ${journal.length} bytes (expected ${JOURNAL_LEN})`,
-  );
+  console.error(`  FAIL: journal is ${journal.length} bytes (expected ${JOURNAL_LEN})`);
   process.exit(1);
 }
 const journalFields = unpackJournalRaw(journal);
@@ -768,12 +755,7 @@ console.log("  PASS: seal and journal valid");
 
 // ── Step 6: v4 artifact pipeline round-trip ──────────────────────────────
 console.log("\nStep 6: Testing v4 artifact pipeline...");
-const artifact = await buildProofArtifactV4(
-  "boundless",
-  new Date().toISOString(),
-  seal,
-  journal,
-);
+const artifact = await buildProofArtifactV4("boundless", new Date().toISOString(), seal, journal);
 const parsedArtifact = parseProofArtifactV4(artifact);
 const parsedSeal = hexToBytes(parsedArtifact.seal_hex);
 if (parsedSeal.length !== 260) {
@@ -808,12 +790,7 @@ const journalRawHex = Array.from(journalBuf)
 
 // SHA-256 digest of the journal (for logging)
 const journalDigestBytes = new Uint8Array(
-  await crypto.subtle.digest(
-    "SHA-256",
-    new Uint8Array(
-      journalRawHex.match(/.{2}/g)!.map((h) => Number.parseInt(h, 16)),
-    ),
-  ),
+  await crypto.subtle.digest("SHA-256", hexPairsToBytes(journalRawHex) as BufferSource),
 );
 const journalDigestHex = Array.from(journalDigestBytes)
   .map((b) => b.toString(16).padStart(2, "0"))
@@ -826,15 +803,11 @@ const stellarSeal = parsedSeal;
 // Check what imageId the contract currently has stored
 try {
   const storedImageId = await scoreClient.image_id();
-  const storedHex = Buffer.from(
-    storedImageId.result as unknown as Uint8Array,
-  ).toString("hex");
+  const storedHex = Buffer.from(storedImageId.result as unknown as Uint8Array).toString("hex");
   console.log(`  Contract imageId: 0x${storedHex}`);
   console.log(`  Our ELF imageId:  ${IMAGE_ID}`);
   if (`0x${storedHex}` !== IMAGE_ID) {
-    console.error(
-      "  WARNING: imageId MISMATCH — contract needs set_image_id update",
-    );
+    console.error("  WARNING: imageId MISMATCH — contract needs set_image_id update");
   }
 } catch (e) {
   console.log(
@@ -845,10 +818,7 @@ try {
 const invokeArgs = new xdr.InvokeContractArgs({
   contractAddress: Address.fromString(SCORE_CONTRACT_ID).toScAddress(),
   functionName: "submit_score",
-  args: [
-    xdr.ScVal.scvBytes(Buffer.from(stellarSeal)),
-    xdr.ScVal.scvBytes(Buffer.from(journalBuf)),
-  ],
+  args: [xdr.ScVal.scvBytes(Buffer.from(stellarSeal)), xdr.ScVal.scvBytes(Buffer.from(journalBuf))],
 });
 const hostFn = xdr.HostFunction.hostFunctionTypeInvokeContract(invokeArgs);
 const payload = {
@@ -876,33 +846,20 @@ try {
 
   if (txHashStellar.length > 0) {
     console.log(`  Stellar tx: ${txHashStellar} (status: ${status})`);
-    console.log(
-      `  Explorer: https://stellar.expert/explorer/testnet/tx/${txHashStellar}`,
-    );
-    console.log(
-      "\n=== E2E Test PASSED — Full Boundless → Stellar Pipeline ===",
-    );
+    console.log(`  Explorer: https://stellar.expert/explorer/testnet/tx/${txHashStellar}`);
+    console.log("\n=== E2E Test PASSED — Full Boundless → Stellar Pipeline ===");
     process.exit(0);
   } else {
-    console.error(
-      `  Relayer accepted but no tx hash returned (status: ${status})`,
-    );
+    console.error(`  Relayer accepted but no tx hash returned (status: ${status})`);
     process.exit(1);
   }
 } catch (error) {
-  const errObj =
-    error && typeof error === "object"
-      ? (error as Record<string, unknown>)
-      : {};
-  const msg = (
-    error instanceof Error ? error.message : String(error)
-  ).toLowerCase();
+  const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
+  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
   const details =
     typeof errObj.errorDetails === "string"
       ? errObj.errorDetails.toLowerCase()
-      : JSON.stringify(
-          errObj.errorDetails ?? errObj.details ?? "",
-        ).toLowerCase();
+      : JSON.stringify(errObj.errorDetails ?? errObj.details ?? "").toLowerCase();
   const combined = `${msg} ${details}`;
   // Expected contract rejections are still a valid E2E test
   if (
@@ -910,13 +867,9 @@ try {
     combined.includes("scorenotimproved") ||
     /contract,\s*#5\b/.test(combined)
   ) {
-    console.log(
-      `  Contract rejected: ScoreNotImproved (existing score is higher)`,
-    );
+    console.log(`  Contract rejected: ScoreNotImproved (existing score is higher)`);
     console.log("  This is expected if the same tape was submitted before.");
-    console.log(
-      "\n=== E2E Test PASSED — Pipeline valid, score already claimed ===",
-    );
+    console.log("\n=== E2E Test PASSED — Pipeline valid, score already claimed ===");
     process.exit(0);
   }
   if (
@@ -926,9 +879,7 @@ try {
   ) {
     console.log(`  Contract rejected: JournalAlreadyClaimed`);
     console.log("  This is expected if the same proof was submitted before.");
-    console.log(
-      "\n=== E2E Test PASSED — Pipeline valid, journal already claimed ===",
-    );
+    console.log("\n=== E2E Test PASSED — Pipeline valid, journal already claimed ===");
     process.exit(0);
   }
   console.error(

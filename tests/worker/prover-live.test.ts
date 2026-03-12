@@ -19,8 +19,7 @@ import type { WorkerEnv } from "../../worker/env";
 
 const PROVER_BASE_URL = "https://risc0-kalien.stellar.buzz";
 const TAPE_DIR = join(import.meta.dir, "../../test-fixtures");
-const TEST_CLAIMANT =
-  "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const TEST_CLAIMANT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 
 function makeEnv(overrides?: Partial<WorkerEnv>): WorkerEnv {
   return {
@@ -73,13 +72,12 @@ describe("live prover integration", () => {
     if (skipIfUnreachable()) return;
 
     const env = makeEnv({
-      PROVER_EXPECTED_IMAGE_ID:
-        "0000000000000000000000000000000000000000000000000000000000000000",
+      PROVER_EXPECTED_IMAGE_ID: "0000000000000000000000000000000000000000000000000000000000000000",
     });
 
-    await expect(
-      getValidatedProverHealth(env, { forceRefresh: true }),
-    ).rejects.toThrow(/image_id mismatch/);
+    await expect(getValidatedProverHealth(env, { forceRefresh: true })).rejects.toThrow(
+      /image_id mismatch/,
+    );
   });
 
   // ───── Submit + poll (medium tape, groth16) ─────
@@ -88,9 +86,7 @@ describe("live prover integration", () => {
     if (skipIfUnreachable()) return;
 
     const env = makeEnv();
-    const tapeBytes = new Uint8Array(
-      readFileSync(join(TAPE_DIR, "test-medium.tape")),
-    );
+    const tapeBytes = new Uint8Array(readFileSync(join(TAPE_DIR, "test-medium.tape")));
 
     // Submit
     const seedId = 1;
@@ -110,10 +106,12 @@ describe("live prover integration", () => {
     const deadline = Date.now() + 300_000;
     let pollResult = await pollProverOnce(env, submitResult.jobId);
 
+    /* eslint-disable no-await-in-loop -- live prover polling must remain sequential */
     while (pollResult.type === "running" && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 5_000));
       pollResult = await pollProverOnce(env, submitResult.jobId);
     }
+    /* eslint-enable no-await-in-loop */
 
     expect(pollResult.type).toBe("success");
     if (pollResult.type !== "success") return;
@@ -147,9 +145,7 @@ describe("live prover integration", () => {
     if (skipIfUnreachable()) return;
 
     const env = makeEnv();
-    const tapeBytes = new Uint8Array(
-      readFileSync(join(TAPE_DIR, "test-real-game.tape")),
-    );
+    const tapeBytes = new Uint8Array(readFileSync(join(TAPE_DIR, "test-real-game.tape")));
 
     const seedId = 2;
     const submitResult = await submitToProver(env, tapeBytes, {
@@ -163,10 +159,12 @@ describe("live prover integration", () => {
     const deadline = Date.now() + 300_000;
     let pollResult = await pollProverOnce(env, submitResult.jobId);
 
+    /* eslint-disable no-await-in-loop -- live prover polling must remain sequential */
     while (pollResult.type === "running" && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 5_000));
       pollResult = await pollProverOnce(env, submitResult.jobId);
     }
+    /* eslint-enable no-await-in-loop */
 
     expect(pollResult.type).toBe("success");
     if (pollResult.type !== "success") return;
@@ -188,9 +186,7 @@ describe("live prover integration", () => {
     if (skipIfUnreachable()) return;
 
     const env = makeEnv();
-    const tapeBytes = new Uint8Array(
-      readFileSync(join(TAPE_DIR, "test-short.tape")),
-    );
+    const tapeBytes = new Uint8Array(readFileSync(join(TAPE_DIR, "test-short.tape")));
 
     const submitResult = await submitToProver(env, tapeBytes, {
       segmentLimitPo2: 21,
@@ -207,10 +203,7 @@ describe("live prover integration", () => {
     if (skipIfUnreachable()) return;
 
     const env = makeEnv();
-    const result = await pollProverOnce(
-      env,
-      "00000000-0000-0000-0000-000000000000",
-    );
+    const result = await pollProverOnce(env, "00000000-0000-0000-0000-000000000000");
 
     expect(result.type).toBe("retry");
     if (result.type === "retry") {

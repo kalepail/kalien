@@ -10,10 +10,7 @@ const TESTNET_API = "https://testnet.kalien.xyz";
 const KALIEN_ISSUER = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 
 type GetAccountFn = (address: string) => Promise<unknown>;
-type GetContractDataFn = (
-  contractId: string,
-  key: unknown,
-) => Promise<unknown>;
+type GetContractDataFn = (contractId: string, key: unknown) => Promise<unknown>;
 type GetAssetBalanceFn = (
   address: string,
   asset: { getCode(): string; getIssuer(): string },
@@ -21,7 +18,11 @@ type GetAssetBalanceFn = (
 ) => Promise<{ balanceEntry?: unknown }>;
 type BestScoreFn = (args: { claimant: string; seed_id: number }) => Promise<{ result: number }>;
 type TokenIdFn = () => Promise<{ result: string }>;
-type FetchSeedByIdFn = (contractId: string, rpcUrl: string, seedId: number) => Promise<number | null>;
+type FetchSeedByIdFn = (
+  contractId: string,
+  rpcUrl: string,
+  seedId: number,
+) => Promise<number | null>;
 
 let getAccountImpl: GetAccountFn = async () => undefined;
 let getContractDataImpl: GetContractDataFn = async () => ({
@@ -75,8 +76,6 @@ mock.module("@stellar/stellar-sdk", () => ({
   },
   rpc: {
     Server: class MockRpcServer {
-      constructor(_rpcUrl: string, _opts?: { allowHttp?: boolean }) {}
-
       getAccount(address: string): Promise<unknown> {
         return getAccountImpl(address);
       }
@@ -105,7 +104,9 @@ mock.module("@stellar/stellar-sdk", () => ({
 }));
 
 mock.module("../../shared/stellar/strkey", () => ({
-  parseClaimantStrKeyFromUserInput: (value: string): { normalized: string; type: "account" | "contract" } => {
+  parseClaimantStrKeyFromUserInput: (
+    value: string,
+  ): { normalized: string; type: "account" | "contract" } => {
     const normalized = value.trim().toUpperCase();
     if (normalized.startsWith("G")) {
       return { normalized, type: "account" };
@@ -119,12 +120,6 @@ mock.module("../../shared/stellar/strkey", () => ({
 
 mock.module("asteroids-score", () => ({
   Client: class MockScoreClient {
-    constructor(_opts: {
-      contractId: string;
-      rpcUrl: string;
-      networkPassphrase: string;
-    }) {}
-
     best_score(args: { claimant: string; seed_id: number }): Promise<{ result: number }> {
       return bestScoreImpl(args);
     }
@@ -137,11 +132,8 @@ mock.module("asteroids-score", () => ({
 
 mock.module("@/chain/seed", () => ({
   SEED_INTERVAL_SECONDS: 600,
-  fetchSeedById: (
-    contractId: string,
-    rpcUrl: string,
-    seedId: number,
-  ): Promise<number | null> => fetchSeedByIdImpl(contractId, rpcUrl, seedId),
+  fetchSeedById: (contractId: string, rpcUrl: string, seedId: number): Promise<number | null> =>
+    fetchSeedByIdImpl(contractId, rpcUrl, seedId),
 }));
 
 const { runCliPreflight } = await import("../../cli/src/preflight.ts?test=preflight");

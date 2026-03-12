@@ -15,7 +15,7 @@ import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { Link } from "@/components/shared/Link";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { abbreviateAddress, KALIEN_SCALE, formatWholeNumber } from "@/lib/format";
-import { loadSmartWalletModule } from "@/wallet/loader";
+import { getSmartAccountKit } from "@/wallet/smartAccount";
 import { readTokenBalance } from "@/chain/token";
 import { getSwapConfig, getSwapQuote, executeSwap, type SwapQuote } from "@/chain/swap";
 
@@ -193,8 +193,7 @@ export function WalletPage() {
     setTransferSuccess(false);
 
     try {
-      const walletModule = await loadSmartWalletModule();
-      const kit = walletModule.getSmartAccountKit();
+      const kit = getSmartAccountKit();
 
       const result = await kit.transfer(tokenId, trimmedRecipient, parsedAmount, {
         credentialId: wallet.session.credentialId,

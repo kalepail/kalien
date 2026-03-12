@@ -6,11 +6,7 @@
 
 import { encodeGuestEnvV1, encodeStdin } from "../worker/boundless/stdin";
 import { DEFAULT_BOUNDLESS_MAX_FRAMES } from "../worker/constants";
-import {
-  buildProofArtifactV4,
-  parseProofArtifactV4,
-  sha256Hex,
-} from "../worker/proof-artifact";
+import { buildProofArtifactV4, parseProofArtifactV4, sha256Hex } from "../worker/proof-artifact";
 import {
   decodeClaimantFromJournal,
   JOURNAL_CLAIMANT_ENCODED_LEN,
@@ -64,10 +60,7 @@ function decodeGuestEnvV1(encoded: Uint8Array): Uint8Array {
     arrLen = (encoded[pos++] << 8) | encoded[pos++];
   } else if (arrTag === 0xdd) {
     arrLen =
-      (encoded[pos++] << 24) |
-      (encoded[pos++] << 16) |
-      (encoded[pos++] << 8) |
-      encoded[pos++];
+      (encoded[pos++] << 24) | (encoded[pos++] << 16) | (encoded[pos++] << 8) | encoded[pos++];
   } else {
     throw new Error(`unexpected msgpack array tag 0x${arrTag.toString(16)}`);
   }
@@ -80,9 +73,7 @@ function decodeGuestEnvV1(encoded: Uint8Array): Uint8Array {
     } else if (tag === 0xcc) {
       result[i] = encoded[pos++];
     } else {
-      throw new Error(
-        `unexpected msgpack element tag 0x${tag.toString(16)} at ${i}`,
-      );
+      throw new Error(`unexpected msgpack element tag 0x${tag.toString(16)} at ${i}`);
     }
   }
 
@@ -148,10 +139,7 @@ test("encodes default max_frames and caller seed_id/claimant/tape", () => {
   });
 
   const decoded = decodeStdinEnvelope(encoded);
-  assert(
-    decoded.maxFrames === DEFAULT_BOUNDLESS_MAX_FRAMES,
-    "default max_frames mismatch",
-  );
+  assert(decoded.maxFrames === DEFAULT_BOUNDLESS_MAX_FRAMES, "default max_frames mismatch");
   assert(decoded.seedId === 4242, "seed_id mismatch");
   assert(decoded.claimant === CLAIMANT, "claimant mismatch");
   assert(decoded.tapeLen === tape.length, "tape_len mismatch");
@@ -212,9 +200,7 @@ function makeFakeJournal(fields: {
   });
 }
 
-const TEST_SELECTOR: [number, number, number, number] = [
-  0xde, 0xad, 0xbe, 0xef,
-];
+const TEST_SELECTOR: [number, number, number, number] = [0xde, 0xad, 0xbe, 0xef];
 const TEST_JOURNAL = {
   seed_id: 778899,
   seed: 0x12345678,
@@ -260,19 +246,10 @@ test("builds v4 artifact with canonical fields", async () => {
   );
   const parsed = parseProofArtifactV4(artifact);
 
-  assert(
-    parsed.requested_receipt_kind === "groth16",
-    "requested receipt kind mismatch",
-  );
-  assert(
-    parsed.produced_receipt_kind === "groth16",
-    "produced receipt kind mismatch",
-  );
+  assert(parsed.requested_receipt_kind === "groth16", "requested receipt kind mismatch");
+  assert(parsed.produced_receipt_kind === "groth16", "produced receipt kind mismatch");
   assert(parsed.seal_hex.length === 520, "seal_hex length mismatch");
-  assert(
-    parsed.journal_raw_hex.length === 98,
-    "journal_raw_hex length mismatch",
-  );
+  assert(parsed.journal_raw_hex.length === 98, "journal_raw_hex length mismatch");
 });
 
 test("throws when parsing artifact with non-v4 version", () => {

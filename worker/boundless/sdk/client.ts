@@ -28,7 +28,7 @@ import { BOUNDLESS_INDEXER_URLS, MAX_INLINE_STDIN_BYTES } from "../config";
 import { boundlessMarketAbi, eip712Types } from "../abi";
 import { encodeStdin } from "../stdin";
 import { uploadInput } from "../storage";
-import { fetchEthPriceUsd, usdToWei, weiToUsd } from "../pricing";
+import { fetchEthPriceUsd, resolveUsdOfferToWei, weiToUsd } from "../pricing";
 import { buildProofArtifactV4 } from "../../proof-artifact";
 import { parseAndValidateTape } from "../../tape";
 import { DEFAULT_MAX_TAPE_BYTES } from "../../constants";
@@ -107,15 +107,22 @@ export class BoundlessClient {
     const account = privateKeyToAccount(config.privateKey);
 
     // 1. Resolve USD pricing to wei via Chainlink ETH/USD feed
-    let ethPriceUsd: number;
+    let ethPriceUsd: number | null;
     let minPrice: bigint;
     let maxPrice: bigint;
     try {
-      ethPriceUsd = await fetchEthPriceUsd(config.rpcUrl, Number(config.chainId));
-      minPrice = usdToWei(config.minPriceUsd, ethPriceUsd);
-      maxPrice = usdToWei(config.maxPriceUsd, ethPriceUsd);
+      ({
+        ethPriceUsd,
+        minPriceWei: minPrice,
+        maxPriceWei: maxPrice,
+      } = await resolveUsdOfferToWei({
+        rpcUrl: config.rpcUrl,
+        chainId: Number(config.chainId),
+        minPriceUsd: config.minPriceUsd,
+        maxPriceUsd: config.maxPriceUsd,
+      }));
       console.log("[boundless] ETH price", {
-        ethPriceUsd: ethPriceUsd.toFixed(2),
+        ethPriceUsd: ethPriceUsd?.toFixed(2) ?? null,
         maxPriceUsd: config.maxPriceUsd,
         maxPriceWei: maxPrice.toString(),
         minPriceUsd: config.minPriceUsd,
@@ -231,7 +238,7 @@ export class BoundlessClient {
         rampUpPeriod: config.rampPeriodSec,
         lockTimeout: config.lockTimeoutSec,
         timeout: config.timeoutSec,
-        lockCollateral: 0n,
+        lockCollateral: config.lockCollateralBaseUnits,
       },
     };
 
@@ -409,6 +416,7 @@ export class BoundlessClient {
                   minPriceWei: minPrice.toString(),
                   maxPriceWei: maxPrice.toString(),
                   maxPriceUsd: config.maxPriceUsd,
+                  lockCollateralBaseUnits: config.lockCollateralBaseUnits.toString(),
                   fundingMode: fundingPlan.mode,
                   marketBalanceBeforeWei: fundingPlan.marketBalanceBeforeWei?.toString() ?? null,
                   autoDepositWei: fundingPlan.autoDepositWei?.toString() ?? null,
@@ -427,6 +435,7 @@ export class BoundlessClient {
               minPriceWei: minPrice.toString(),
               maxPriceWei: maxPrice.toString(),
               maxPriceUsd: config.maxPriceUsd,
+              lockCollateralBaseUnits: config.lockCollateralBaseUnits.toString(),
               fundingMode: fundingPlan.mode,
               marketBalanceBeforeWei: fundingPlan.marketBalanceBeforeWei?.toString() ?? null,
               autoDepositWei: fundingPlan.autoDepositWei?.toString() ?? null,

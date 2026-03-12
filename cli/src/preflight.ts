@@ -73,7 +73,8 @@ function parseSeedApiResponse(payload: unknown): SeedApiResponse | null {
     success: obj.success === true,
     error: typeof obj.error === "string" ? obj.error : undefined,
     seed_id: typeof obj.seed_id === "number" ? obj.seed_id : undefined,
-    seed: typeof obj.seed === "number" || obj.seed === null ? (obj.seed as number | null) : undefined,
+    seed:
+      typeof obj.seed === "number" || obj.seed === null ? (obj.seed as number | null) : undefined,
   };
 }
 
@@ -169,9 +170,7 @@ async function resolveSacAssetFromTokenContract(
   return parseSacAssetFromName(extractSacMetadataName(instance.storage()));
 }
 
-async function resolveTokenContractIdFromScoreContract(
-  opts: CliPreflightOptions,
-): Promise<string> {
+async function resolveTokenContractIdFromScoreContract(opts: CliPreflightOptions): Promise<string> {
   const client = new ScoreClient({
     contractId: opts.contractId,
     rpcUrl: opts.rpcUrl,
@@ -190,6 +189,7 @@ async function resolveTokenContractIdFromScoreContract(
     throw new Error(
       `cannot read token_id from score contract ${opts.contractId} on ${opts.network} (${opts.rpcUrl}): ${detail}. ` +
         `Check --network/--rpc-url/--contract-id alignment.`,
+      { cause: error },
     );
   }
 }
@@ -211,10 +211,12 @@ async function assertContractExistsOnNetwork(
       throw new Error(
         `${label} ${contractId} does not exist on ${network} (${rpcUrl}); ` +
           `use a ${network} contract ID or switch --network/--rpc-url`,
+        { cause: error },
       );
     }
     throw new Error(
       `failed to verify ${label} ${contractId} on ${network} (${rpcUrl}): ${detail}`,
+      { cause: error },
     );
   }
 }
@@ -238,10 +240,12 @@ async function assertAccountAndTrustlineOnNetwork(
       throw new Error(
         `claimant account ${address} does not exist on ${network} (${rpcUrl}); ` +
           `use an account on this network or switch --network/--rpc-url`,
+        { cause: error },
       );
     }
     throw new Error(
       `failed to verify claimant account ${address} on ${network} (${rpcUrl}): ${detail}`,
+      { cause: error },
     );
   }
 
@@ -249,6 +253,7 @@ async function assertAccountAndTrustlineOnNetwork(
     const detail = safeErrorMessage(error);
     throw new Error(
       `failed to resolve KALIEN token asset from ${tokenContractId} on ${network}: ${detail}`,
+      { cause: error },
     );
   });
 
@@ -264,11 +269,12 @@ async function assertAccountAndTrustlineOnNetwork(
         `account ${address} does not have the required trustline for ` +
           `${asset.getCode()}:${asset.getIssuer()} on ${network}; ` +
           `open the trustline before running`,
+        { cause: error },
       );
     }
-    throw new Error(
-      `failed to verify trustline for ${address} on ${network}: ${detail}`,
-    );
+    throw new Error(`failed to verify trustline for ${address} on ${network}: ${detail}`, {
+      cause: error,
+    });
   }
 }
 
@@ -314,11 +320,15 @@ async function assertScoreContractReachable(opts: CliPreflightOptions): Promise<
     throw new Error(
       `cannot read score contract ${opts.contractId} on ${opts.network} (${opts.rpcUrl}): ${detail}. ` +
         `Check --network/--rpc-url/--contract-id alignment.`,
+      { cause: error },
     );
   }
 }
 
-async function assertApiSeedMatchesRpc(opts: CliPreflightOptions, warnings: string[]): Promise<void> {
+async function assertApiSeedMatchesRpc(
+  opts: CliPreflightOptions,
+  warnings: string[],
+): Promise<void> {
   const current = await readSeedEndpoint(opts.apiUrl, "/api/seed/current", "GET");
 
   let seedId = typeof current.seed_id === "number" ? current.seed_id >>> 0 : null;

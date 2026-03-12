@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { decodeCredentialPublicKey } from "@simplewebauthn/server/helpers";
 const {
-  LeaderboardCredentialBindingError,
   assertCredentialBelongsToClaimantContract,
   base64UrlToHex,
   encodeRawP256PublicKeyBase64UrlToCose,
@@ -13,10 +12,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/u, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
 }
 
 describe("leaderboard profile auth helpers", () => {
@@ -38,24 +34,16 @@ describe("leaderboard profile auth helpers", () => {
     expect(decoded.get(1)).toBe(2);
     expect(decoded.get(3)).toBe(-7);
     expect(decoded.get(-1)).toBe(1);
-    expect(Array.from(decoded.get(-2) as Uint8Array)).toEqual(
-      Array.from(raw.slice(1, 33)),
-    );
-    expect(Array.from(decoded.get(-3) as Uint8Array)).toEqual(
-      Array.from(raw.slice(33, 65)),
-    );
+    expect(Array.from(decoded.get(-2) as Uint8Array)).toEqual(Array.from(raw.slice(1, 33)));
+    expect(Array.from(decoded.get(-3) as Uint8Array)).toEqual(Array.from(raw.slice(33, 65)));
   });
 
   it("rejects malformed raw public keys", () => {
     expect(() =>
-      encodeRawP256PublicKeyBase64UrlToCose(
-        bytesToBase64Url(new Uint8Array([0x04, 0x01, 0x02])),
-      ),
+      encodeRawP256PublicKeyBase64UrlToCose(bytesToBase64Url(new Uint8Array([0x04, 0x01, 0x02]))),
     ).toThrow("65-byte");
     expect(() =>
-      encodeRawP256PublicKeyBase64UrlToCose(
-        bytesToBase64Url(new Uint8Array(65)),
-      ),
+      encodeRawP256PublicKeyBase64UrlToCose(bytesToBase64Url(new Uint8Array(65))),
     ).toThrow("65-byte");
   });
 
@@ -104,8 +92,7 @@ describe("leaderboard profile auth helpers", () => {
   });
 
   it("marks indexer upstream failures as retryable", async () => {
-    const fetchImpl = (async () =>
-      new Response("upstream down", { status: 503 })) as typeof fetch;
+    const fetchImpl = (async () => new Response("upstream down", { status: 503 })) as typeof fetch;
 
     await expect(
       assertCredentialBelongsToClaimantContract({

@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
 
 import { cpus } from "os";
+import { cleanupCommand, psCommand } from "./commands/processes";
+import { replayCommand } from "./commands/replay";
+import { runCommand } from "./commands/run";
 import * as ansi from "./display/ansi";
 import { NETWORKS, type NetworkName } from "./constants";
 
@@ -50,12 +53,7 @@ function parseArgs(argv: string[]): {
   args: Record<string, string>;
   positional: string[];
 } {
-  const booleanFlags = new Set([
-    "help",
-    "dry-run",
-    "all",
-    "orphan-only",
-  ]);
+  const booleanFlags = new Set(["help", "dry-run", "all", "orphan-only"]);
   const args: Record<string, string> = {};
   const positional: string[] = [];
   let command = "";
@@ -120,12 +118,11 @@ async function main(): Promise<void> {
         args["threads"] === "max"
           ? coreCount
           : args["threads"]?.endsWith("%")
-            ? Math.max(1, Math.round(coreCount * parseInt(args["threads"]) / 100))
+            ? Math.max(1, Math.round((coreCount * parseInt(args["threads"])) / 100))
             : args["threads"]
               ? parseInt(args["threads"], 10)
               : 0;
 
-      const { runCommand } = await import("./commands/run");
       await runCommand({
         network,
         networkPassphrase: NETWORKS[network].networkPassphrase,
@@ -149,24 +146,20 @@ async function main(): Promise<void> {
         process.exit(1);
       }
 
-      const { replayCommand } = await import("./commands/replay");
       await replayCommand(tapePath);
       break;
     }
 
     case "ps": {
-      const { psCommand } = await import("./commands/processes");
       await psCommand();
       break;
     }
 
     case "cleanup": {
-      const { cleanupCommand } = await import("./commands/processes");
       await cleanupCommand({
         all: args["all"] === "true",
         dryRun: args["dry-run"] === "true",
-        orphanOnly:
-          args["all"] === "true" ? false : args["orphan-only"] !== "false",
+        orphanOnly: args["all"] === "true" ? false : args["orphan-only"] !== "false",
         olderThan: args["older-than"] || null,
       });
       break;

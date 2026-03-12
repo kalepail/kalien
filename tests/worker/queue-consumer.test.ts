@@ -15,12 +15,14 @@ const proofTapeMappingWrites: Array<{ txHash: string; proofJobId: string }> = []
 let proofClaimIndexWriteFailuresRemaining = 0;
 let proofTapeMappingWriteFailuresRemaining = 0;
 
+function MockProofCoordinatorDO() {}
+
 // Mock coordinator and prover before importing the consumer
 mock.module("../../worker/durable/coordinator", () => ({
   coordinatorStub: (env: WorkerEnv) =>
     (env as WorkerEnv & { __coordinator: Record<string, unknown> }).__coordinator,
   asPublicJob: <T>(job: T): T => job,
-  ProofCoordinatorDO: class ProofCoordinatorDO {},
+  ProofCoordinatorDO: MockProofCoordinatorDO,
 }));
 
 mock.module("../../worker/boundless/config", () => ({
@@ -36,7 +38,6 @@ mock.module("../../worker/boundless/config", () => ({
 
 mock.module("../../worker/boundless/sdk/client", () => ({
   BoundlessClient: class MockBoundlessClient {
-    constructor(_config: unknown) {}
     async submitRequest(_tape: Uint8Array, _metadata: unknown) {
       return (globalThis as Record<string, unknown>).__boundlessSubmitResult;
     }
@@ -130,7 +131,7 @@ function makeMessage<T>(body: T, attempts = 1): Message<T> {
     ack() {
       acked = true;
     },
-    retry(options?: { delaySeconds?: number }) {
+    retry(_options?: { delaySeconds?: number }) {
       retried = true;
     },
     get _acked() {
@@ -358,7 +359,10 @@ describe("handleQueueBatch (Boundless)", () => {
     }>;
     const failedCall = calls.find((c) => c.method === "markFailed");
     expect(failedCall).toBeDefined();
-    expect(String(failedCall!.args[1])).toContain("superseded by claimed score");
+    if (!failedCall) {
+      throw new Error("expected markFailed call");
+    }
+    expect(String(failedCall.args[1])).toContain("superseded by claimed score");
     expect(calls.some((c) => c.method === "markProverAccepted")).toBe(false);
     expect(calls.some((c) => c.method === "markDispatchFailedAndTryNextBackend")).toBe(false);
   });
@@ -535,7 +539,10 @@ describe("handleQueueBatch (Boundless)", () => {
     }>;
     const failCall = calls.find((c) => c.method === "markDispatchFailedAndTryNextBackend");
     expect(failCall).toBeDefined();
-    expect(String(failCall!.args[2])).toContain("boundless backend not configured");
+    if (!failCall) {
+      throw new Error("expected dispatch failure call");
+    }
+    expect(String(failCall.args[2])).toContain("boundless backend not configured");
   });
 });
 
@@ -601,7 +608,10 @@ describe("handleVastQueueBatch (VastAI)", () => {
     }>;
     const failedCall = calls.find((c) => c.method === "markFailed");
     expect(failedCall).toBeDefined();
-    expect(String(failedCall!.args[1])).toContain("superseded by claimed score");
+    if (!failedCall) {
+      throw new Error("expected markFailed call");
+    }
+    expect(String(failedCall.args[1])).toContain("superseded by claimed score");
     expect(calls.some((c) => c.method === "markRetry")).toBe(false);
   });
 
@@ -782,7 +792,10 @@ describe("handleVastQueueBatch (VastAI)", () => {
     }>;
     const failCall = calls.find((c) => c.method === "markFailed");
     expect(failCall).toBeDefined();
-    expect(String(failCall!.args[1])).toContain("timed out");
+    if (!failCall) {
+      throw new Error("expected markFailed call");
+    }
+    expect(String(failCall.args[1])).toContain("timed out");
   });
 
   it("submits to vast when slot is free", async () => {
@@ -1224,7 +1237,7 @@ describe("handleClaimQueueBatch", () => {
 
 describe("handleClaimQueueBatch — R2 artifact retry", () => {
   it("retries (not fails) when R2 artifact is missing on first attempt", async () => {
-    const proofArtifact = await makeTestProofArtifact(TEST_JOURNAL);
+    const _proofArtifact = await makeTestProofArtifact(TEST_JOURNAL);
     const coordinator = makeCoordinator({
       beginClaimAttempt: async () => ({
         jobId: "job-1",
@@ -1362,6 +1375,9 @@ describe("handleClaimDlqBatch", () => {
     }>;
     const failCall = calls.find((c) => c.method === "markClaimFailed");
     expect(failCall).toBeDefined();
-    expect(String(failCall!.args[1])).toContain("dead-letter");
+    if (!failCall) {
+      throw new Error("expected markClaimFailed call");
+    }
+    expect(String(failCall.args[1])).toContain("dead-letter");
   });
 });

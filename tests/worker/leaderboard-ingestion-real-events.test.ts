@@ -63,8 +63,7 @@ function makeEnv(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
     PROVER_BASE_URL: "http://127.0.0.1:8088",
     GALEXIE_RPC_BASE_URL: "https://rpc-test.example.com",
     CLAIM_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015",
-    SCORE_CONTRACT_ID:
-      "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU",
+    SCORE_CONTRACT_ID: "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU",
     ...overrides,
   } as WorkerEnv;
 }
@@ -105,18 +104,13 @@ describe("real event XDR decoding", () => {
 
 describe("real event RPC ingestion", () => {
   it("parses real getEvents response into leaderboard records", async () => {
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url !== "https://rpc-test.example.com/") {
         return new Response(null, { status: 404 });
       }
 
-      const body = init?.body
-        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
-        : {};
+      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
       if (body.method === "getHealth") {
         return jsonResponse({
           result: {
@@ -151,7 +145,11 @@ describe("real event RPC ingestion", () => {
     expect(result.events).toHaveLength(1);
     expect(result.nextCursor).toBe("0004527367976386559-4294967295");
 
-    const event = result.events[0]!;
+    const [event] = result.events;
+    expect(event).toBeDefined();
+    if (!event) {
+      throw new Error("expected normalized event");
+    }
     expect(event.eventId).toBe("0004527097393475584-0000000001");
     expect(event.claimantAddress).toBe(EXPECTED.claimantAddress);
     expect(event.seed).toBe(EXPECTED.seed >>> 0);
@@ -172,13 +170,8 @@ describe("real event RPC ingestion", () => {
       topic: ["AAAADwAAAAtub3Rfc2NvcmU="],
     };
 
-    globalThis.fetch = (async (
-      _input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
-      const body = init?.body
-        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
-        : {};
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
       if (body.method === "getHealth") {
         return jsonResponse({
           result: { latestLedger: 1054109, oldestLedger: 933150 },
@@ -231,7 +224,11 @@ describe("events_api normalization", () => {
 
     expect(normalized.events).toHaveLength(1);
     expect(normalized.nextCursor).toBe("cursor-1");
-    const event = normalized.events[0]!;
+    const [event] = normalized.events;
+    expect(event).toBeDefined();
+    if (!event) {
+      throw new Error("expected normalized event");
+    }
     expect(event.claimantAddress).toBe(EXPECTED.claimantAddress);
     expect(event.seed).toBe(EXPECTED.seed >>> 0);
     expect(event.finalScore).toBe(EXPECTED.finalScore >>> 0);

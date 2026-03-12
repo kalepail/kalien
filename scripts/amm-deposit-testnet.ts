@@ -39,8 +39,7 @@ const RPC_URL = "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE = Networks.TESTNET;
 
 // Current Soroswap testnet addresses (from soroswap/core testnet.contracts.json)
-const SOROSWAP_ROUTER =
-  "CCJUD55AG6W5HAI5LRVNKAE5WDP5XGZBUDS5WNTIVDU7O264UZZE7BRD";
+const SOROSWAP_ROUTER = "CCJUD55AG6W5HAI5LRVNKAE5WDP5XGZBUDS5WNTIVDU7O264UZZE7BRD";
 
 const KALIEN_CODE = "KALIEN";
 const KALE_CODE = "KALE";
@@ -85,9 +84,7 @@ const sorobanRpc = new rpc.Server(RPC_URL);
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 async function friendbot(address: string, label: string): Promise<void> {
-  const res = await fetch(
-    `https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`,
-  );
+  const res = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`);
   if (res.ok) {
     console.log(`  ✓ Friendbot funded ${label} (${address.slice(0, 8)}...)`);
   } else {
@@ -163,10 +160,12 @@ async function submitSorobanTx(
     }
 
     let getResult = await sorobanRpc.getTransaction(sendResult.hash);
+    /* eslint-disable no-await-in-loop -- transaction polling must remain sequential */
     while (getResult.status === "NOT_FOUND") {
       await new Promise((r) => setTimeout(r, 2000));
       getResult = await sorobanRpc.getTransaction(sendResult.hash);
     }
+    /* eslint-enable no-await-in-loop */
 
     if (getResult.status === "SUCCESS") {
       console.log(`  ✓ ${label} succeeded!`);
@@ -185,10 +184,9 @@ async function submitSorobanTx(
 function deploySac(asset: Asset, label: string): string {
   // Get the deterministic SAC address
   const assetStr = `${asset.getCode()}:${asset.getIssuer()}`;
-  const sacAddress = execSync(
-    `stellar contract id asset --asset "${assetStr}" --network testnet`,
-    { encoding: "utf-8" },
-  ).trim();
+  const sacAddress = execSync(`stellar contract id asset --asset "${assetStr}" --network testnet`, {
+    encoding: "utf-8",
+  }).trim();
 
   if (submitMode) {
     try {

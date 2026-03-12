@@ -112,9 +112,7 @@ export function warmRestartConfig(reference: AutopilotConfig): AutopilotConfig {
 
   // Boolean: 50% chance to inherit from reference, 50% random
   blended.preferSmallAsteroids =
-    Math.random() < 0.5
-      ? reference.preferSmallAsteroids
-      : random.preferSmallAsteroids;
+    Math.random() < 0.5 ? reference.preferSmallAsteroids : random.preferSmallAsteroids;
 
   // Enforce constraint
   if (blended.cautionRadius <= blended.dangerRadius + 30) {

@@ -1,322 +1,314 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "kalien",
-	"main": "./worker/index.ts",
-	"compatibility_date": "2026-02-24",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"workers_dev": false,
-	"routes": [
-		{
-			"pattern": "testnet.kalien.xyz",
-			"custom_domain": true,
-		},
-	],
-	"observability": {
-		"enabled": true,
-		"logs": {
-			"invocation_logs": false,
-			// "head_sampling_rate": 1,
-		},
-		// "traces": {
-		// 	"enabled": true,
-		// 	"head_sampling_rate": 1,
-		// },
-	},
-	"assets": {
-		"not_found_handling": "single-page-application",
-		"binding": "ASSETS",
-	},
-	"vars": {
-		// Prover
-		"PROVER_BASE_URL": "https://risc0-kalien.stellar.buzz",
-		// Gateway limits
-		"MAX_PROOF_TOTAL_WALL_TIME_MS": "3900000",
-		"MAX_PROVER_RUN_TIME_MS": "660000",
-		"COMPLETED_JOB_RETENTION_MS": "604800000",
-		// Relayer (OpenZeppelin Channels testnet)
-		"RELAYER_URL": "https://channels.openzeppelin.com/testnet",
-		"RELAYER_PLUGIN_ID": "",
-		// Boundless proving (alternative to Vast.ai prover)
-		// Secrets (BOUNDLESS_PRIVATE_KEY, PINATA_JWT) go in .dev.vars / `wrangler secret`
-		// Defaults target Base Mainnet (chain 8453). Override BOUNDLESS_CHAIN_ID for testnets.
-		"BOUNDLESS_RPC_URL": "https://base-mainnet.public.blastapi.io",
-		"BOUNDLESS_IMAGE_URL": "https://gateway.pinata.cloud/ipfs/QmQ7m1WcrHH4TABWwYjroZzKPeSmqBXv8NeMHvwGFzFwrk",
-		"BOUNDLESS_IMAGE_ID": "0x37dfd7b9ca6490f5db1e9cd4dfa5ceadae573e44c6fd351e9cdc2cb7138b8111",
-		"BOUNDLESS_MAX_PRICE_USD": "0.02",
-		"BOUNDLESS_MIN_PRICE_USD": "0.0002",
-		// Add this buffer (basis points) on top of deficit when auto-depositing.
-		"BOUNDLESS_TOP_UP_BUFFER_BPS": "1500",
-		"BOUNDLESS_FLAT_PERIOD_SEC": "60",
-		"BOUNDLESS_RAMP_PERIOD_SEC": "660",
-		"BOUNDLESS_LOCK_TIMEOUT_SEC": "1740",
-		"BOUNDLESS_TIMEOUT_SEC": "3540",
-		"BOUNDLESS_POLL_TIMEOUT_MS": "600000",
-		// Set chain ID to select known deployment (8453=Base Mainnet, 11155111=Eth Sepolia, 84532=Base Sepolia)
-		// Or set explicit overrides: BOUNDLESS_MARKET_ADDRESS, BOUNDLESS_ORDER_STREAM_URL, BOUNDLESS_DEPLOYMENT_BLOCK
-		"BOUNDLESS_CHAIN_ID": "8453",
-		// Stellar testnet
-		"SCORE_CONTRACT_ID": "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU",
-		"CLAIM_NETWORK_PASSPHRASE": "Test SDF Network ; September 2015",
-		// Leaderboard sync (auto mode → RPC-only on testnet; Galexie vars omitted)
-		"LEADERBOARD_SYNC_CRON_ENABLED": "1",
-		"LEADERBOARD_SYNC_CRON_LIMIT": "400",
-		"LEADERBOARD_CATCHUP_INTERVAL_MINUTES": "30",
-		"LEADERBOARD_CATCHUP_WINDOW_LEDGERS": "8000",
-		"LEADERBOARD_TAPE_BACKFILL_ENABLED": "1",
-		"LEADERBOARD_TAPE_BACKFILL_INTERVAL_MINUTES": "10",
-		"LEADERBOARD_TAPE_STALE_PRUNE_ENABLED": "1",
-		"LEADERBOARD_TAPE_STALE_PRUNE_INTERVAL_MINUTES": "30",
-	},
-	"d1_databases": [
-		{
-			"binding": "LEADERBOARD_DB",
-			"database_name": "kalien-leaderboard",
-			"database_id": "3ca395d5-5de1-4d46-ac16-b9c2d9982e84",
-		},
-	],
-	// R2 bucket for proof tapes & results.
-	// IMPORTANT: Configure an R2 lifecycle rule "expire-proof-jobs" on this bucket
-	// to auto-delete objects after 7 days. Without it, proof artifacts accumulate indefinitely.
-	// Dashboard → R2 → kalien-proof-artifacts → Settings → Object lifecycle rules.
-	"r2_buckets": [
-		{
-			"binding": "PROOF_ARTIFACTS",
-			"bucket_name": "kalien-proof-artifacts",
-		},
-	],
-	"queues": {
-		"producers": [
-			{
-				"binding": "PROOF_QUEUE",
-				"queue": "kalien-proof-jobs",
-			},
-			{
-				"binding": "VAST_QUEUE",
-				"queue": "kalien-vast-jobs",
-			},
-			{
-				"binding": "CLAIM_QUEUE",
-				"queue": "kalien-claim-jobs",
-			},
-		],
-		"consumers": [
-			{
-				// Boundless submissions — parallel, many concurrent
-				"queue": "kalien-proof-jobs",
-				"max_batch_size": 1,
-				"max_batch_timeout": 1,
-				"max_retries": 10,
-				"max_concurrency": 5,
-				"dead_letter_queue": "kalien-proof-jobs-dlq",
-			},
-			{
-				"queue": "kalien-proof-jobs-dlq",
-				"max_batch_size": 1,
-				"max_batch_timeout": 5,
-				"max_retries": 3,
-				"max_concurrency": 1,
-			},
-			{
-				// VastAI submissions — serial, 1 GPU at a time
-				"queue": "kalien-vast-jobs",
-				"max_batch_size": 1,
-				"max_batch_timeout": 1,
-				"max_retries": 30,
-				"max_concurrency": 1,
-				"dead_letter_queue": "kalien-vast-jobs-dlq",
-			},
-			{
-				"queue": "kalien-vast-jobs-dlq",
-				"max_batch_size": 1,
-				"max_batch_timeout": 5,
-				"max_retries": 3,
-				"max_concurrency": 1,
-			},
-			{
-				"queue": "kalien-claim-jobs",
-				"max_batch_size": 1,
-				"max_batch_timeout": 1,
-				"max_retries": 10,
-				"max_concurrency": 1,
-				"dead_letter_queue": "kalien-claim-jobs-dlq",
-			},
-			{
-				"queue": "kalien-claim-jobs-dlq",
-				"max_batch_size": 1,
-				"max_batch_timeout": 5,
-				"max_retries": 3,
-				"max_concurrency": 1,
-			},
-		],
-	},
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "PROOF_COORDINATOR",
-				"class_name": "ProofCoordinatorDO",
-			},
-		],
-	},
-	"migrations": [
-		{
-			"tag": "v1-proof-coordinator",
-			"new_sqlite_classes": [
-				"ProofCoordinatorDO"
-			],
-		},
-	],
-	"triggers": {
-		"crons": [
-			"*/1 * * * *",
-			"*/10 * * * *"
-		],
-	},
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kalien",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-02-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "testnet.kalien.xyz",
+      "custom_domain": true,
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false,
+      // "head_sampling_rate": 1,
+    },
+    // "traces": {
+    // 	"enabled": true,
+    // 	"head_sampling_rate": 1,
+    // },
+  },
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+  },
+  "vars": {
+    // Prover
+    "PROVER_BASE_URL": "https://risc0-kalien.stellar.buzz",
+    // Gateway limits
+    "MAX_PROOF_TOTAL_WALL_TIME_MS": "3900000",
+    "MAX_PROVER_RUN_TIME_MS": "660000",
+    "COMPLETED_JOB_RETENTION_MS": "604800000",
+    // Relayer (OpenZeppelin Channels testnet)
+    "RELAYER_URL": "https://channels.openzeppelin.com/testnet",
+    "RELAYER_PLUGIN_ID": "",
+    // Boundless proving (alternative to Vast.ai prover)
+    // Secrets (BOUNDLESS_PRIVATE_KEY, PINATA_JWT) go in .dev.vars / `wrangler secret`
+    // Defaults target Base Mainnet (chain 8453). Override BOUNDLESS_CHAIN_ID for testnets.
+    "BOUNDLESS_RPC_URL": "https://base-mainnet.public.blastapi.io",
+    "BOUNDLESS_IMAGE_URL": "https://gateway.pinata.cloud/ipfs/QmQ7m1WcrHH4TABWwYjroZzKPeSmqBXv8NeMHvwGFzFwrk",
+    "BOUNDLESS_IMAGE_ID": "0x37dfd7b9ca6490f5db1e9cd4dfa5ceadae573e44c6fd351e9cdc2cb7138b8111",
+    "BOUNDLESS_MAX_PRICE_USD": "0.10",
+    "BOUNDLESS_MIN_PRICE_USD": "0",
+    "BOUNDLESS_LOCK_COLLATERAL_ZKC": "5",
+    // Add this buffer (basis points) on top of deficit when auto-depositing.
+    "BOUNDLESS_TOP_UP_BUFFER_BPS": "1500",
+    "BOUNDLESS_FLAT_PERIOD_SEC": "60",
+    "BOUNDLESS_RAMP_PERIOD_SEC": "660",
+    "BOUNDLESS_LOCK_TIMEOUT_SEC": "1740",
+    "BOUNDLESS_TIMEOUT_SEC": "3540",
+    "BOUNDLESS_POLL_TIMEOUT_MS": "600000",
+    // Set chain ID to select known deployment (8453=Base Mainnet, 11155111=Eth Sepolia, 84532=Base Sepolia)
+    // Or set explicit overrides: BOUNDLESS_MARKET_ADDRESS, BOUNDLESS_ORDER_STREAM_URL, BOUNDLESS_DEPLOYMENT_BLOCK
+    "BOUNDLESS_CHAIN_ID": "8453",
+    // Stellar testnet
+    "SCORE_CONTRACT_ID": "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU",
+    "CLAIM_NETWORK_PASSPHRASE": "Test SDF Network ; September 2015",
+    // Leaderboard sync (auto mode → RPC-only on testnet; Galexie vars omitted)
+    "LEADERBOARD_SYNC_CRON_ENABLED": "1",
+    "LEADERBOARD_SYNC_CRON_LIMIT": "400",
+    "LEADERBOARD_CATCHUP_INTERVAL_MINUTES": "30",
+    "LEADERBOARD_CATCHUP_WINDOW_LEDGERS": "8000",
+    "LEADERBOARD_TAPE_BACKFILL_ENABLED": "1",
+    "LEADERBOARD_TAPE_BACKFILL_INTERVAL_MINUTES": "10",
+    "LEADERBOARD_TAPE_STALE_PRUNE_ENABLED": "1",
+    "LEADERBOARD_TAPE_STALE_PRUNE_INTERVAL_MINUTES": "30",
+  },
+  "d1_databases": [
+    {
+      "binding": "LEADERBOARD_DB",
+      "database_name": "kalien-leaderboard",
+      "database_id": "3ca395d5-5de1-4d46-ac16-b9c2d9982e84",
+    },
+  ],
+  // R2 bucket for proof tapes & results.
+  // IMPORTANT: Configure an R2 lifecycle rule "expire-proof-jobs" on this bucket
+  // to auto-delete objects after 7 days. Without it, proof artifacts accumulate indefinitely.
+  // Dashboard → R2 → kalien-proof-artifacts → Settings → Object lifecycle rules.
+  "r2_buckets": [
+    {
+      "binding": "PROOF_ARTIFACTS",
+      "bucket_name": "kalien-proof-artifacts",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "PROOF_QUEUE",
+        "queue": "kalien-proof-jobs",
+      },
+      {
+        "binding": "VAST_QUEUE",
+        "queue": "kalien-vast-jobs",
+      },
+      {
+        "binding": "CLAIM_QUEUE",
+        "queue": "kalien-claim-jobs",
+      },
+    ],
+    "consumers": [
+      {
+        // Boundless submissions — parallel, many concurrent
+        "queue": "kalien-proof-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 10,
+        "max_concurrency": 5,
+        "dead_letter_queue": "kalien-proof-jobs-dlq",
+      },
+      {
+        "queue": "kalien-proof-jobs-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 1,
+      },
+      {
+        // VastAI submissions — serial, 1 GPU at a time
+        "queue": "kalien-vast-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 30,
+        "max_concurrency": 1,
+        "dead_letter_queue": "kalien-vast-jobs-dlq",
+      },
+      {
+        "queue": "kalien-vast-jobs-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "kalien-claim-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 10,
+        "max_concurrency": 1,
+        "dead_letter_queue": "kalien-claim-jobs-dlq",
+      },
+      {
+        "queue": "kalien-claim-jobs-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 1,
+      },
+    ],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PROOF_COORDINATOR",
+        "class_name": "ProofCoordinatorDO",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1-proof-coordinator",
+      "new_sqlite_classes": ["ProofCoordinatorDO"],
+    },
+  ],
+  "triggers": {
+    "crons": ["*/1 * * * *", "*/10 * * * *"],
+  },
 
-	// ── Mainnet environment ──────────────────────────────────────────────
-	// Deploy: CLOUDFLARE_ENV=mainnet vite build --mode mainnet && wrangler deploy --env mainnet
-	"env": {
-		"mainnet": {
-			"name": "kalien-mainnet",
-			"assets": {
-				"not_found_handling": "single-page-application",
-				"binding": "ASSETS",
-			},
-			"routes": [
-				{
-					"pattern": "kalien.xyz",
-					"custom_domain": true,
-				},
-			],
-			"vars": {
-				// Prover
-				"PROVER_BASE_URL": "https://risc0-kalien.stellar.buzz",
-				// Gateway limits
-				"MAX_PROOF_TOTAL_WALL_TIME_MS": "3900000",
-				"MAX_PROVER_RUN_TIME_MS": "660000",
-				"COMPLETED_JOB_RETENTION_MS": "604800000",
-				// Relayer (OpenZeppelin Channels mainnet)
-				"RELAYER_URL": "https://channels.openzeppelin.com",
-				"RELAYER_PLUGIN_ID": "",
-				// Boundless proving
-				"BOUNDLESS_RPC_URL": "https://base-mainnet.public.blastapi.io",
-				"BOUNDLESS_IMAGE_URL": "https://gateway.pinata.cloud/ipfs/QmQ7m1WcrHH4TABWwYjroZzKPeSmqBXv8NeMHvwGFzFwrk",
-				"BOUNDLESS_IMAGE_ID": "0x37dfd7b9ca6490f5db1e9cd4dfa5ceadae573e44c6fd351e9cdc2cb7138b8111",
-				"BOUNDLESS_MAX_PRICE_USD": "0.02",
-				"BOUNDLESS_MIN_PRICE_USD": "0.0002",
-				"BOUNDLESS_TOP_UP_BUFFER_BPS": "1500",
-				"BOUNDLESS_FLAT_PERIOD_SEC": "60",
-				"BOUNDLESS_RAMP_PERIOD_SEC": "660",
-				"BOUNDLESS_LOCK_TIMEOUT_SEC": "1740",
-				"BOUNDLESS_TIMEOUT_SEC": "3540",
-				"BOUNDLESS_POLL_TIMEOUT_MS": "600000",
-				"BOUNDLESS_CHAIN_ID": "8453",
-				// Stellar mainnet
-				"SCORE_CONTRACT_ID": "CDDAYXNY6MMA47Q54VSHG2WV445ZUOJ354NOLSFRC7ZUDTD6OTS4A7PE",
-				"CLAIM_NETWORK_PASSPHRASE": "Public Global Stellar Network ; September 2015",
-				"STELLAR_RPC_URL": "https://rpc.lightsail.network",
-				"SMART_ACCOUNT_INDEXER_URL": "https://smart-account-indexer-mainnet.sdf-ecosystem.workers.dev",
-				// Leaderboard sync
-				"LEADERBOARD_SYNC_CRON_ENABLED": "1",
-				"LEADERBOARD_SYNC_CRON_LIMIT": "400",
-				"LEADERBOARD_CATCHUP_INTERVAL_MINUTES": "30",
-				"LEADERBOARD_CATCHUP_WINDOW_LEDGERS": "8000",
-				"LEADERBOARD_TAPE_BACKFILL_ENABLED": "1",
-				"LEADERBOARD_TAPE_BACKFILL_INTERVAL_MINUTES": "10",
-				"LEADERBOARD_TAPE_STALE_PRUNE_ENABLED": "1",
-				"LEADERBOARD_TAPE_STALE_PRUNE_INTERVAL_MINUTES": "30",
-			},
-			"d1_databases": [
-				{
-					"binding": "LEADERBOARD_DB",
-					"database_name": "kalien-mainnet-leaderboard",
-					"database_id": "4172bfa1-deb7-4250-83a4-b1f8b26734d6",
-				},
-			],
-			"r2_buckets": [
-				{
-					"binding": "PROOF_ARTIFACTS",
-					"bucket_name": "kalien-mainnet-proof-artifacts",
-				},
-			],
-			"queues": {
-				"producers": [
-					{
-						"binding": "PROOF_QUEUE",
-						"queue": "kalien-mainnet-proof-jobs",
-					},
-					{
-						"binding": "VAST_QUEUE",
-						"queue": "kalien-mainnet-vast-jobs",
-					},
-					{
-						"binding": "CLAIM_QUEUE",
-						"queue": "kalien-mainnet-claim-jobs",
-					},
-				],
-				"consumers": [
-					{
-						"queue": "kalien-mainnet-proof-jobs",
-						"max_batch_size": 1,
-						"max_batch_timeout": 1,
-						"max_retries": 10,
-						"max_concurrency": 5,
-						"dead_letter_queue": "kalien-mainnet-proof-jobs-dlq",
-					},
-					{
-						"queue": "kalien-mainnet-proof-jobs-dlq",
-						"max_batch_size": 1,
-						"max_batch_timeout": 5,
-						"max_retries": 3,
-						"max_concurrency": 1,
-					},
-					{
-						"queue": "kalien-mainnet-vast-jobs",
-						"max_batch_size": 1,
-						"max_batch_timeout": 1,
-						"max_retries": 30,
-						"max_concurrency": 1,
-						"dead_letter_queue": "kalien-mainnet-vast-jobs-dlq",
-					},
-					{
-						"queue": "kalien-mainnet-vast-jobs-dlq",
-						"max_batch_size": 1,
-						"max_batch_timeout": 5,
-						"max_retries": 3,
-						"max_concurrency": 1,
-					},
-					{
-						"queue": "kalien-mainnet-claim-jobs",
-						"max_batch_size": 1,
-						"max_batch_timeout": 1,
-						"max_retries": 10,
-						"max_concurrency": 1,
-						"dead_letter_queue": "kalien-mainnet-claim-jobs-dlq",
-					},
-					{
-						"queue": "kalien-mainnet-claim-jobs-dlq",
-						"max_batch_size": 1,
-						"max_batch_timeout": 5,
-						"max_retries": 3,
-						"max_concurrency": 1,
-					},
-				],
-			},
-			"durable_objects": {
-				"bindings": [
-					{
-						"name": "PROOF_COORDINATOR",
-						"class_name": "ProofCoordinatorDO",
-					},
-				],
-			},
-			"triggers": {
-				"crons": [
-					"*/1 * * * *",
-					"*/10 * * * *"
-				],
-			},
-		},
-	},
+  // ── Mainnet environment ──────────────────────────────────────────────
+  // Deploy: CLOUDFLARE_ENV=mainnet vite build --mode mainnet && wrangler deploy --env mainnet
+  "env": {
+    "mainnet": {
+      "name": "kalien-mainnet",
+      "assets": {
+        "not_found_handling": "single-page-application",
+        "binding": "ASSETS",
+      },
+      "routes": [
+        {
+          "pattern": "kalien.xyz",
+          "custom_domain": true,
+        },
+      ],
+      "vars": {
+        // Prover
+        "PROVER_BASE_URL": "https://risc0-kalien.stellar.buzz",
+        // Gateway limits
+        "MAX_PROOF_TOTAL_WALL_TIME_MS": "3900000",
+        "MAX_PROVER_RUN_TIME_MS": "660000",
+        "COMPLETED_JOB_RETENTION_MS": "604800000",
+        // Relayer (OpenZeppelin Channels mainnet)
+        "RELAYER_URL": "https://channels.openzeppelin.com",
+        "RELAYER_PLUGIN_ID": "",
+        // Boundless proving
+        "BOUNDLESS_RPC_URL": "https://base-mainnet.public.blastapi.io",
+        "BOUNDLESS_IMAGE_URL": "https://gateway.pinata.cloud/ipfs/QmQ7m1WcrHH4TABWwYjroZzKPeSmqBXv8NeMHvwGFzFwrk",
+        "BOUNDLESS_IMAGE_ID": "0x37dfd7b9ca6490f5db1e9cd4dfa5ceadae573e44c6fd351e9cdc2cb7138b8111",
+        "BOUNDLESS_MAX_PRICE_USD": "0.10",
+        "BOUNDLESS_MIN_PRICE_USD": "0",
+        "BOUNDLESS_LOCK_COLLATERAL_ZKC": "5",
+        "BOUNDLESS_TOP_UP_BUFFER_BPS": "1500",
+        "BOUNDLESS_FLAT_PERIOD_SEC": "60",
+        "BOUNDLESS_RAMP_PERIOD_SEC": "660",
+        "BOUNDLESS_LOCK_TIMEOUT_SEC": "1740",
+        "BOUNDLESS_TIMEOUT_SEC": "3540",
+        "BOUNDLESS_POLL_TIMEOUT_MS": "600000",
+        "BOUNDLESS_CHAIN_ID": "8453",
+        // Stellar mainnet
+        "SCORE_CONTRACT_ID": "CDDAYXNY6MMA47Q54VSHG2WV445ZUOJ354NOLSFRC7ZUDTD6OTS4A7PE",
+        "CLAIM_NETWORK_PASSPHRASE": "Public Global Stellar Network ; September 2015",
+        "STELLAR_RPC_URL": "https://rpc.lightsail.network",
+        "SMART_ACCOUNT_INDEXER_URL": "https://smart-account-indexer-mainnet.sdf-ecosystem.workers.dev",
+        // Leaderboard sync
+        "LEADERBOARD_SYNC_CRON_ENABLED": "1",
+        "LEADERBOARD_SYNC_CRON_LIMIT": "400",
+        "LEADERBOARD_CATCHUP_INTERVAL_MINUTES": "30",
+        "LEADERBOARD_CATCHUP_WINDOW_LEDGERS": "8000",
+        "LEADERBOARD_TAPE_BACKFILL_ENABLED": "1",
+        "LEADERBOARD_TAPE_BACKFILL_INTERVAL_MINUTES": "10",
+        "LEADERBOARD_TAPE_STALE_PRUNE_ENABLED": "1",
+        "LEADERBOARD_TAPE_STALE_PRUNE_INTERVAL_MINUTES": "30",
+      },
+      "d1_databases": [
+        {
+          "binding": "LEADERBOARD_DB",
+          "database_name": "kalien-mainnet-leaderboard",
+          "database_id": "4172bfa1-deb7-4250-83a4-b1f8b26734d6",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "PROOF_ARTIFACTS",
+          "bucket_name": "kalien-mainnet-proof-artifacts",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "PROOF_QUEUE",
+            "queue": "kalien-mainnet-proof-jobs",
+          },
+          {
+            "binding": "VAST_QUEUE",
+            "queue": "kalien-mainnet-vast-jobs",
+          },
+          {
+            "binding": "CLAIM_QUEUE",
+            "queue": "kalien-mainnet-claim-jobs",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "kalien-mainnet-proof-jobs",
+            "max_batch_size": 1,
+            "max_batch_timeout": 1,
+            "max_retries": 10,
+            "max_concurrency": 5,
+            "dead_letter_queue": "kalien-mainnet-proof-jobs-dlq",
+          },
+          {
+            "queue": "kalien-mainnet-proof-jobs-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "max_concurrency": 1,
+          },
+          {
+            "queue": "kalien-mainnet-vast-jobs",
+            "max_batch_size": 1,
+            "max_batch_timeout": 1,
+            "max_retries": 30,
+            "max_concurrency": 1,
+            "dead_letter_queue": "kalien-mainnet-vast-jobs-dlq",
+          },
+          {
+            "queue": "kalien-mainnet-vast-jobs-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "max_concurrency": 1,
+          },
+          {
+            "queue": "kalien-mainnet-claim-jobs",
+            "max_batch_size": 1,
+            "max_batch_timeout": 1,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "dead_letter_queue": "kalien-mainnet-claim-jobs-dlq",
+          },
+          {
+            "queue": "kalien-mainnet-claim-jobs-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "max_concurrency": 1,
+          },
+        ],
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "PROOF_COORDINATOR",
+            "class_name": "ProofCoordinatorDO",
+          },
+        ],
+      },
+      "triggers": {
+        "crons": ["*/1 * * * *", "*/10 * * * *"],
+      },
+    },
+  },
 }

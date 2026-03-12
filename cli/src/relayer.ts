@@ -58,17 +58,10 @@ async function fetchSeedById(
   const server = new rpc.Server(rpcUrl, {
     allowHttp: rpcUrl.startsWith("http:"),
   });
-  const key = xdr.ScVal.scvVec([
-    xdr.ScVal.scvSymbol("SeedById"),
-    xdr.ScVal.scvU32(seedId),
-  ]);
+  const key = xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("SeedById"), xdr.ScVal.scvU32(seedId)]);
 
   try {
-    const entry = await server.getContractData(
-      contractId,
-      key,
-      rpc.Durability.Temporary,
-    );
+    const entry = await server.getContractData(contractId, key, rpc.Durability.Temporary);
     const value = entry.val.contractData().val();
     if (value.switch().name !== "scvU32") {
       return null;
@@ -104,31 +97,24 @@ export async function bumpSeedViaRelayer(
   });
 
   try {
-    const currentSeedPayload = buildInvokePayloadForContractFn(
-      contractId,
-      "current_seed",
-      [],
-    );
+    const currentSeedPayload = buildInvokePayloadForContractFn(contractId, "current_seed", []);
     await submitInvokeViaRelayer(channelsClient, currentSeedPayload);
 
     const nowSeedId = Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
-    const candidateSeedIds =
-      nowSeedId > 0 ? [nowSeedId, nowSeedId - 1] : [nowSeedId];
+    const candidateSeedIds = nowSeedId > 0 ? [nowSeedId, nowSeedId - 1] : [nowSeedId];
     let materializedSeedId: number | null = null;
     let materializedSeed: number | null = null;
 
+    /* eslint-disable no-await-in-loop -- seed candidates must be checked in order */
     for (const candidateSeedId of candidateSeedIds) {
-      const candidateSeed = await fetchSeedById(
-        contractId,
-        rpcUrl,
-        candidateSeedId,
-      );
+      const candidateSeed = await fetchSeedById(contractId, rpcUrl, candidateSeedId);
       if (candidateSeed !== null) {
         materializedSeedId = candidateSeedId;
         materializedSeed = candidateSeed;
         break;
       }
     }
+    /* eslint-enable no-await-in-loop */
 
     if (materializedSeedId === null || materializedSeed === null) {
       console.warn(

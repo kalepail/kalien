@@ -68,15 +68,13 @@ async function fetchBestScoreForSeedOnNetwork(
 
 export async function runCommand(opts: RunOptions): Promise<void> {
   const availableCores = cpus().length;
-  const threadCount = opts.threads > 0
-    ? opts.threads
-    : Math.max(1, Math.floor(availableCores / 2));
+  const threadCount = opts.threads > 0 ? opts.threads : Math.max(1, Math.floor(availableCores / 2));
 
   const pct = Math.round((threadCount / availableCores) * 100);
   process.stdout.write(
     ansi.color(ansi.cyan, "  Cores: ") +
-    ansi.color(ansi.white, `${threadCount}/${availableCores}`) +
-    ansi.color(ansi.dim, ` (${pct}%)\n`),
+      ansi.color(ansi.white, `${threadCount}/${availableCores}`) +
+      ansi.color(ansi.dim, ` (${pct}%)\n`),
   );
 
   process.stdout.write(ansi.color(ansi.cyan, "  Running preflight checks..."));
@@ -91,9 +89,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   });
   process.stdout.write(ansi.color(ansi.green, " ok\n"));
   for (const warning of preflight.warnings) {
-    process.stdout.write(
-      ansi.color(ansi.yellow, `  Warning: ${warning}\n`),
-    );
+    process.stdout.write(ansi.color(ansi.yellow, `  Warning: ${warning}\n`));
   }
 
   // Fetch on-chain high score before starting workers
@@ -137,9 +133,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     try {
       return await Promise.race<number | null>([
         fetchSeedFromContract(opts.contractId, opts.rpcUrl),
-        new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), SEED_FETCH_TIMEOUT_MS),
-        ),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), SEED_FETCH_TIMEOUT_MS)),
       ]);
     } catch {
       return null;
@@ -221,6 +215,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       return;
     }
     try {
+      // eslint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage does not accept targetOrigin
       worker.postMessage(msg);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -238,7 +233,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       ? new Worker("./worker/game-worker.ts")
       : new Worker(new URL("../worker/game-worker.ts", import.meta.url));
     workerAlive[i] = true;
-    worker.onmessage = (event: MessageEvent<WorkerToMainMessage>) => {
+    worker.addEventListener("message", (event: MessageEvent<WorkerToMainMessage>) => {
       const msg = event.data;
       switch (msg.type) {
         case "game-complete":
@@ -282,15 +277,15 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           workerAlive[msg.workerId] = false;
           break;
       }
-    };
-    worker.onerror = (event) => {
+    });
+    worker.addEventListener("error", (event) => {
       workerAlive[i] = false;
       const detail =
         event instanceof ErrorEvent && typeof event.message === "string"
           ? event.message
           : "unknown worker error";
       lastSubmitStatus = ansi.color(ansi.red, `worker ${i} crashed: ${detail}`);
-    };
+    });
     workers.push(worker);
     safePostToWorker(i, {
       type: "start",
@@ -316,8 +311,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     workerBests.fill(0);
 
     // Carry best config forward only if it improved over defaults
-    const seedConfig =
-      prevBestScore > 0 ? prevBestConfig : Autopilot.defaults();
+    const seedConfig = prevBestScore > 0 ? prevBestConfig : Autopilot.defaults();
     bestConfig = seedConfig;
 
     for (let i = 0; i < workers.length; i++) {
@@ -349,11 +343,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     }
 
     // Settle delay: wait for score to stop climbing before submitting
-    if (
-      !force &&
-      bestScoreFoundAt > 0 &&
-      Date.now() - bestScoreFoundAt < SETTLE_DELAY_MS
-    ) {
+    if (!force && bestScoreFoundAt > 0 && Date.now() - bestScoreFoundAt < SETTLE_DELAY_MS) {
       return;
     }
 
@@ -361,17 +351,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     const tape = bestTape;
     const score = bestScore;
 
-    lastSubmitStatus = ansi.color(
-      ansi.yellow,
-      `submitting (score: ${score})...`,
-    );
+    lastSubmitStatus = ansi.color(ansi.yellow, `submitting (score: ${score})...`);
 
-    const result: SubmitResult = await submitTape(
-      tape,
-      opts.address,
-      currentEpoch,
-      opts.apiUrl,
-    );
+    const result: SubmitResult = await submitTape(tape, opts.address, currentEpoch, opts.apiUrl);
 
     if (result.success) {
       totalSubmissions++;
@@ -399,6 +381,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       // Drain loop: during doSubmit(), workers can still post new-best messages
       // that update bestScore/bestTape. Keep submitting until no unsubmitted
       // improvements remain so we never lose a late-arriving high score.
+      /* eslint-disable no-await-in-loop, no-unmodified-loop-condition -- drain logic must wait for in-flight submits before deciding whether to submit again */
       for (let drain = 0; drain < 10; drain++) {
         while (submitting) await new Promise((r) => setTimeout(r, 100));
         if (bestTape && bestScore > lastSubmittedScore) {
@@ -407,13 +390,11 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           break;
         }
       }
+      /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
       currentEpoch = epoch;
       currentSeed = null; // will be updated once the fetch resolves
       resetEpoch(); // reset immediately with 0, then backfill from on-chain
-      lastSubmitStatus = ansi.color(
-        ansi.cyan,
-        "new seed_id interval — fetching seed...",
-      );
+      lastSubmitStatus = ansi.color(ansi.cyan, "new seed_id interval — fetching seed...");
       announceSeedResolution = true;
       // Refresh seed and on-chain score in the background
       void refreshCurrentSeed(true);
@@ -453,10 +434,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   process.stdout.write(ansi.clearScreen + ansi.cursorHide);
   const dashInterval = setInterval(() => {
     const now = Date.now();
-    const epochRemainingSec = Math.max(
-      0,
-      (epochEndMs(currentEpoch) - now) / 1000,
-    );
+    const epochRemainingSec = Math.max(0, (epochEndMs(currentEpoch) - now) / 1000);
 
     // Settle countdown (seconds remaining before we'll submit)
     let settleRemainingSec = 0;
@@ -504,26 +482,16 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     }
 
     // Drain any in-flight submit before the final one
+    /* eslint-disable no-await-in-loop, no-unmodified-loop-condition -- shutdown must wait for the current submit to finish before the final flush */
     while (submitting) await new Promise((r) => setTimeout(r, 100));
+    /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
     // Final submit if we have an unsubmitted improvement
     if (bestTape && bestScore > lastSubmittedScore) {
-      console.log(
-        ansi.color(
-          ansi.yellow,
-          `  Submitting best tape (score: ${bestScore})...`,
-        ),
-      );
-      const result = await submitTape(
-        bestTape,
-        opts.address,
-        currentEpoch,
-        opts.apiUrl,
-      );
+      console.log(ansi.color(ansi.yellow, `  Submitting best tape (score: ${bestScore})...`));
+      const result = await submitTape(bestTape, opts.address, currentEpoch, opts.apiUrl);
       if (result.success) {
         totalSubmissions++;
-        console.log(
-          ansi.color(ansi.green, `  Submitted! Job: ${result.jobId || "ok"}`),
-        );
+        console.log(ansi.color(ansi.green, `  Submitted! Job: ${result.jobId || "ok"}`));
       } else {
         console.log(ansi.color(ansi.red, `  Submit failed: ${result.error}`));
       }

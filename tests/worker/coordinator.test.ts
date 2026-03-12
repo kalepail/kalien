@@ -1,8 +1,10 @@
 import { afterAll, describe, expect, it, mock } from "bun:test";
 
 // Mock cloudflare:workers before importing coordinator
+function MockDurableObject() {}
+
 mock.module("cloudflare:workers", () => ({
-  DurableObject: class DurableObject {},
+  DurableObject: MockDurableObject,
 }));
 
 const { asPublicJob } = await import("../../worker/durable/coordinator");
@@ -86,8 +88,7 @@ function makeJob(overrides: Partial<ProofJobRecord> = {}): ProofJobRecord {
       },
     },
     claim: {
-      claimantAddress:
-        "GCHPTWXMT3HYF4RLZHWBNRF4MPXLTJ76ISHMSYIWCCDXWUYOQG5MR2AB",
+      claimantAddress: "GCHPTWXMT3HYF4RLZHWBNRF4MPXLTJ76ISHMSYIWCCDXWUYOQG5MR2AB",
       status: "succeeded",
       attempts: 1,
       lastAttemptAt: "2026-01-01T00:01:30.000Z",
@@ -118,9 +119,7 @@ describe("coordinator helpers", () => {
       expect(publicJob.status).toBe("succeeded");
       expect(publicJob.queue.attempts).toBe(1);
       expect(publicJob.prover.jobId).toBe("prover-job-1");
-      expect(publicJob.result?.artifactKey).toBe(
-        "proof-jobs/job-1/result.json",
-      );
+      expect(publicJob.result?.artifactKey).toBe("proof-jobs/job-1/result.json");
       expect(publicJob.claim.txHash).toBe("tx-hash-1");
       expect(publicJob.error).toBeNull();
     });
@@ -190,8 +189,7 @@ describe("coordinator helpers", () => {
           activeAttemptIndex: 0,
         },
         claim: {
-          claimantAddress:
-            "GCHPTWXMT3HYF4RLZHWBNRF4MPXLTJ76ISHMSYIWCCDXWUYOQG5MR2AB",
+          claimantAddress: "GCHPTWXMT3HYF4RLZHWBNRF4MPXLTJ76ISHMSYIWCCDXWUYOQG5MR2AB",
           status: "succeeded",
           attempts: 1,
           lastAttemptAt: "2026-01-01T00:01:30.000Z",

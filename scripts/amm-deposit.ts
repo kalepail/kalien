@@ -40,15 +40,11 @@ const RPC_URL = "https://rpc.lightsail.network";
 const NETWORK_PASSPHRASE = Networks.PUBLIC;
 
 const KALIEN_CODE = "KALIEN";
-const KALIEN_ISSUER =
-  "GB53F5Y2DC5ZNRVMTVNUECM5DVTGY2SFJMHE3DWO53CGL62OXKKALIEN";
+const KALIEN_ISSUER = "GB53F5Y2DC5ZNRVMTVNUECM5DVTGY2SFJMHE3DWO53CGL62OXKKALIEN";
 const KALE_SAC = "CB23WRDQWGSP6YPMY4UV5C4OW5CBTXKYN3XEATG7KJEZCXMJBYEHOUOV";
-const KALIEN_SAC =
-  "CB4YK5LZG2EGRHJOS4WNX7AAFP3RR3RS5YJUC6D52V2HDT7EQO2QDF6T";
-const SOROSWAP_ROUTER =
-  "CAG5LRYQ5JVEUI5TEID72EYOVX44TTUJT5BQR2J6J77FH65PCCFAJDDH";
-const RICH_ADDRESS =
-  "GD2GA2JF6OJURU36COZQWJLPEJ7XC3GB25TBD7U4ALCGKOG27262RICH";
+const KALIEN_SAC = "CB4YK5LZG2EGRHJOS4WNX7AAFP3RR3RS5YJUC6D52V2HDT7EQO2QDF6T";
+const SOROSWAP_ROUTER = "CAG5LRYQ5JVEUI5TEID72EYOVX44TTUJT5BQR2J6J77FH65PCCFAJDDH";
+const RICH_ADDRESS = "GD2GA2JF6OJURU36COZQWJLPEJ7XC3GB25TBD7U4ALCGKOG27262RICH";
 
 const DECIMALS = 7n;
 const RATIO = 100_000n;
@@ -160,9 +156,7 @@ async function submitSorobanTx(
 
   if (rpc.Api.isSimulationError(simResult)) {
     if (!submitMode) {
-      console.log(
-        `  [DRY RUN] Simulation failed (expected — prerequisites not yet on-chain)`,
-      );
+      console.log(`  [DRY RUN] Simulation failed (expected — prerequisites not yet on-chain)`);
       console.log(`  [DRY RUN] Pre-simulation TX XDR:`);
       console.log(`  ${tx.toXDR()}`);
       return;
@@ -188,10 +182,12 @@ async function submitSorobanTx(
     }
 
     let getResult = await sorobanRpc.getTransaction(sendResult.hash);
+    /* eslint-disable no-await-in-loop -- transaction polling must remain sequential */
     while (getResult.status === "NOT_FOUND") {
       await new Promise((r) => setTimeout(r, 2000));
       getResult = await sorobanRpc.getTransaction(sendResult.hash);
     }
+    /* eslint-enable no-await-in-loop */
 
     if (getResult.status === "SUCCESS") {
       console.log(`  ${label} succeeded!`);
@@ -323,9 +319,7 @@ async function main() {
 
   console.log("=== Soroswap KALIEN/KALE Liquidity Pool ===");
   console.log(`Ratio: ${RATIO.toLocaleString()} KALIEN per 1 KALE`);
-  console.log(
-    `Total: ${totalKale.toLocaleString()} KALE + ${totalKalien.toLocaleString()} KALIEN`,
-  );
+  console.log(`Total: ${totalKale.toLocaleString()} KALE + ${totalKalien.toLocaleString()} KALIEN`);
   console.log(
     `Batches: ${TOTAL_BATCHES} x (${BATCH_KALE.toLocaleString()} KALE + ${BATCH_KALIEN.toLocaleString()} KALIEN)`,
   );
@@ -336,6 +330,7 @@ async function main() {
   console.log();
 
   console.log("-- Step 2+3: Mint + Add Liquidity (batched) --");
+  /* eslint-disable no-await-in-loop -- liquidity batches are intentionally serialized */
   for (let i = startBatch; i <= TOTAL_BATCHES; i++) {
     await runBatch(i);
     if (submitMode && i < TOTAL_BATCHES) {
@@ -344,6 +339,7 @@ async function main() {
     }
     console.log();
   }
+  /* eslint-enable no-await-in-loop */
 
   if (submitMode) {
     console.log("-- Verification --");

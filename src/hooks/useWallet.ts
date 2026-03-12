@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SmartAccountConfig, SmartWalletSession } from "../wallet/smartAccount";
-import { loadSmartWalletModule } from "../wallet/loader";
+import {
+  connectSmartWallet,
+  createSmartWallet,
+  disconnectSmartWallet,
+  getSmartAccountConfig,
+  restoreSmartWalletSession,
+  type SmartAccountConfig,
+  type SmartWalletSession,
+} from "../wallet/smartAccount";
 import { TESTNET_NETWORK_PASSPHRASE } from "../consts";
 
 export type WalletAction = "idle" | "restoring" | "connecting" | "creating" | "disconnecting";
@@ -41,9 +48,8 @@ async function restoreWalletState(): Promise<CachedWalletState> {
 
   if (!restoreWalletStatePromise) {
     restoreWalletStatePromise = (async () => {
-      const walletModule = await loadSmartWalletModule();
-      const nextConfig = walletModule.getSmartAccountConfig();
-      const session = await walletModule.restoreSmartWalletSession();
+      const nextConfig = getSmartAccountConfig();
+      const session = await restoreSmartWalletSession();
       const restoredState = {
         networkPassphrase: nextConfig.networkPassphrase,
         session,
@@ -76,16 +82,15 @@ export function useWallet(): UseWalletReturn {
     async (
       actionName: Exclude<WalletAction, "idle" | "restoring">,
       fallbackMsg: string,
-      perform: (mod: Awaited<ReturnType<typeof loadSmartWalletModule>>) => Promise<void>,
+      perform: () => Promise<void>,
     ) => {
       setAction(actionName);
       setError(null);
 
       try {
-        const walletModule = await loadSmartWalletModule();
-        const nextConfig = walletModule.getSmartAccountConfig();
+        const nextConfig = getSmartAccountConfig();
         setConfig({ networkPassphrase: nextConfig.networkPassphrase });
-        await perform(walletModule);
+        await perform();
       } catch (err) {
         const detail = err instanceof Error ? err.message : fallbackMsg;
         setError(detail);
@@ -98,9 +103,9 @@ export function useWallet(): UseWalletReturn {
 
   const connect = useCallback(
     () =>
-      withWalletAction("connecting", "failed to connect wallet", async (mod) => {
-        const nextSession = await mod.connectSmartWallet();
-        const nextConfig = mod.getSmartAccountConfig();
+      withWalletAction("connecting", "failed to connect wallet", async () => {
+        const nextSession = await connectSmartWallet();
+        const nextConfig = getSmartAccountConfig();
         setCachedWalletState({
           networkPassphrase: nextConfig.networkPassphrase,
           session: nextSession,
@@ -112,9 +117,9 @@ export function useWallet(): UseWalletReturn {
 
   const create = useCallback(
     () =>
-      withWalletAction("creating", "failed to create wallet", async (mod) => {
-        const nextSession = await mod.createSmartWallet(userName);
-        const nextConfig = mod.getSmartAccountConfig();
+      withWalletAction("creating", "failed to create wallet", async () => {
+        const nextSession = await createSmartWallet(userName);
+        const nextConfig = getSmartAccountConfig();
         setCachedWalletState({
           networkPassphrase: nextConfig.networkPassphrase,
           session: nextSession,
@@ -126,9 +131,9 @@ export function useWallet(): UseWalletReturn {
 
   const disconnect = useCallback(
     () =>
-      withWalletAction("disconnecting", "failed to disconnect wallet", async (mod) => {
-        await mod.disconnectSmartWallet();
-        const nextConfig = mod.getSmartAccountConfig();
+      withWalletAction("disconnecting", "failed to disconnect wallet", async () => {
+        await disconnectSmartWallet();
+        const nextConfig = getSmartAccountConfig();
         setCachedWalletState({
           networkPassphrase: nextConfig.networkPassphrase,
           session: null,

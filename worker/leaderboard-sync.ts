@@ -47,6 +47,7 @@ import {
   DEFAULT_LEADERBOARD_TAPE_STALE_PRUNE_MAX_BATCHES,
   DEFAULT_LEADERBOARD_TAPE_STALE_PRUNE_OLDEST_FIRST,
 } from "./constants";
+import { coordinatorStub } from "./durable/coordinator";
 
 export interface LeaderboardSyncDeps {
   fetchLeaderboardEventsFromGalexie: typeof fetchLeaderboardEventsFromGalexie;
@@ -854,7 +855,6 @@ const DEFAULT_BACKFILL_DEPS: BackfillProofTapeMappingsDeps = {
   getUnmappedLeaderboardTxHashes,
   writeProofTapeMapping,
   async listJobsForClaimant(env, claimantAddress, limit, offset) {
-    const { coordinatorStub } = await import("./durable/coordinator");
     return coordinatorStub(env).listJobsForClaimant(claimantAddress, limit, offset);
   },
 };

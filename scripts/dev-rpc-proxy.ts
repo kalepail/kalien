@@ -2,12 +2,8 @@ import { createServer, type IncomingMessage } from "node:http";
 
 const host = process.env.RPC_PROXY_HOST ?? "127.0.0.1";
 const port = Number.parseInt(process.env.RPC_PROXY_PORT ?? "8789", 10);
-const targetUrl =
-  process.env.RPC_PROXY_TARGET ?? "https://soroban-testnet.stellar.org";
-const timeoutMs = Number.parseInt(
-  process.env.RPC_PROXY_TIMEOUT_MS ?? "45000",
-  10,
-);
+const targetUrl = process.env.RPC_PROXY_TARGET ?? "https://soroban-testnet.stellar.org";
+const timeoutMs = Number.parseInt(process.env.RPC_PROXY_TIMEOUT_MS ?? "45000", 10);
 
 if (!Number.isFinite(port) || port <= 0) {
   throw new Error(`invalid RPC_PROXY_PORT: ${process.env.RPC_PROXY_PORT}`);

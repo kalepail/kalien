@@ -16,8 +16,7 @@ import { deserializeTape } from "../src/game/tape";
 import { fetchSeedFromContract } from "../src/chain/seed";
 
 const DEFAULT_MAX_FRAMES = 36_000;
-const DEFAULT_RPC_URL =
-  process.env.STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org";
+const DEFAULT_RPC_URL = process.env.STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org";
 const DEFAULT_CONTRACT_ID =
   process.env.SCORE_CONTRACT_ID ??
   process.env.VITE_SCORE_CONTRACT_ID ??
@@ -46,6 +45,7 @@ if (explicitSeed !== null) {
 } else {
   process.stdout.write("Fetching seed from contract...");
   let fetched: number | null = null;
+  /* eslint-disable no-await-in-loop -- seed retries must remain sequential */
   for (let attempt = 0; attempt < 6; attempt++) {
     fetched = await fetchSeedFromContract(DEFAULT_CONTRACT_ID, DEFAULT_RPC_URL);
     if (fetched !== null) break;
@@ -54,6 +54,7 @@ if (explicitSeed !== null) {
       await new Promise((r) => setTimeout(r, 5000));
     }
   }
+  /* eslint-enable no-await-in-loop */
   if (fetched === null) {
     console.error(
       "\nNo seed available for the current window. The backend cron may not have fired yet.",
@@ -73,9 +74,7 @@ if (!outputPath) {
 }
 
 console.log(`Generating tape:`);
-console.log(
-  `  Seed:       0x${seed.toString(16).toUpperCase().padStart(8, "0")}`,
-);
+console.log(`  Seed:       0x${seed.toString(16).toUpperCase().padStart(8, "0")}`);
 console.log(`  Max frames: ${maxFrames}`);
 console.log(`  Output:     ${outputPath}`);
 console.log();
@@ -114,9 +113,7 @@ console.log(`  Frames: ${frame}`);
 console.log(`  Score:  ${game.getScore()}`);
 console.log(`  Wave:   ${game.getWave()}`);
 console.log(`  Lives:  ${game.getLives()}`);
-console.log(
-  `  Time:   ${elapsed.toFixed(1)}ms (${(frame / (elapsed / 1000)).toFixed(0)} fps)`,
-);
+console.log(`  Time:   ${elapsed.toFixed(1)}ms (${(frame / (elapsed / 1000)).toFixed(0)} fps)`);
 
 const tapeData = game.getTape();
 if (!tapeData) {
@@ -152,9 +149,7 @@ const scoreOk = vScore === tape.footer.finalScore;
 if (scoreOk) {
   console.log("VERIFICATION PASSED");
 } else {
-  console.error(
-    `  Score mismatch: got ${vScore}, expected ${tape.footer.finalScore}`,
-  );
+  console.error(`  Score mismatch: got ${vScore}, expected ${tape.footer.finalScore}`);
   console.error("VERIFICATION FAILED");
   process.exit(1);
 }

@@ -18,15 +18,11 @@ import { describe, it, expect, beforeAll } from "bun:test";
 import { fetchLeaderboardEventsFromGalexie } from "../../worker/leaderboard-ingestion";
 import type { WorkerEnv } from "../../worker/env";
 
-
 const TESTNET_RPC = "https://soroban-testnet.stellar.org/";
-const SCORE_CONTRACT =
-  "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU";
+const SCORE_CONTRACT = "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU";
 const KNOWN_LEDGER = 1054047;
-const KNOWN_TX_HASH =
-  "5fd87e77d8e8cc587d153e2fa10bc37faafc5513f6e8ff16561a7c10adde1ff9";
-const KNOWN_CLAIMANT =
-  "CDPAHIOTDASW6WULHAJ5UL4H6YH7OJ2T72LKVT75SCFDZ4YZTOVDFEQX";
+const KNOWN_TX_HASH = "5fd87e77d8e8cc587d153e2fa10bc37faafc5513f6e8ff16561a7c10adde1ff9";
+const KNOWN_CLAIMANT = "CDPAHIOTDASW6WULHAJ5UL4H6YH7OJ2T72LKVT75SCFDZ4YZTOVDFEQX";
 const KNOWN_SCORE = 35_010;
 const KNOWN_SEED = 1741681574;
 
@@ -59,9 +55,7 @@ beforeAll(async () => {
     rpcReachable = false;
   }
   if (!rpcReachable) {
-    console.warn(
-      "Testnet RPC unreachable or event outside retention — skipping live sync tests",
-    );
+    console.warn("Testnet RPC unreachable or event outside retention — skipping live sync tests");
   }
 });
 
@@ -156,9 +150,7 @@ describe("live leaderboard sync against testnet RPC", () => {
     // previousBest <= newBest
     expect(knownEvent.previousBest).toBeLessThanOrEqual(knownEvent.newBest);
     // mintedDelta === newBest - previousBest
-    expect(knownEvent.mintedDelta).toBe(
-      knownEvent.newBest - knownEvent.previousBest,
-    );
+    expect(knownEvent.mintedDelta).toBe(knownEvent.newBest - knownEvent.previousBest);
   }, 30_000);
 
   it("returns correct next cursor for pagination", async () => {
@@ -192,8 +184,7 @@ describe("live leaderboard sync against testnet RPC", () => {
     // Fetch with wrong contract ID — should find no score events
     const wrongEnv = makeEnv();
     // Use a different valid contract address
-    wrongEnv.SCORE_CONTRACT_ID =
-      "CCYKHXM3LO5CC6X26GFOLZGPXWI3P2LWXY3EGG7JTTM5BQ3ISETDQ3DD";
+    wrongEnv.SCORE_CONTRACT_ID = "CCYKHXM3LO5CC6X26GFOLZGPXWI3P2LWXY3EGG7JTTM5BQ3ISETDQ3DD";
     const wrongResult = await fetchLeaderboardEventsFromGalexie(wrongEnv, {
       fromLedger: KNOWN_LEDGER,
       toLedger: KNOWN_LEDGER + 1,

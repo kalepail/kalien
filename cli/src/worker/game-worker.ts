@@ -1,18 +1,10 @@
 /// <reference types="bun-types" />
 import { AsteroidsGame } from "@/game/AsteroidsGame";
 import { Autopilot, type AutopilotConfig } from "@/game/Autopilot";
-import type {
-  MainToWorkerMessage,
-  WorkerRole,
-  WorkerToMainMessage,
-} from "./messages";
+import type { MainToWorkerMessage, WorkerRole, WorkerToMainMessage } from "./messages";
 import { mutateConfig, randomConfig, warmRestartConfig } from "./mutate";
 import { fetchSeedFromContract } from "@/chain/seed";
-import {
-  MAX_FRAMES,
-  EXPLORER_RESTART_THRESHOLD,
-  SEED_INTERVAL_SECONDS,
-} from "../constants";
+import { MAX_FRAMES, EXPLORER_RESTART_THRESHOLD, SEED_INTERVAL_SECONDS } from "../constants";
 import { bumpSeedViaRelayer } from "../relayer";
 
 let workerId = 0;
@@ -42,6 +34,7 @@ async function ensureSeed(): Promise<void> {
 
   let fetched: number | null = null;
   let resolvedSeedId: number | null = null;
+  /* eslint-disable no-await-in-loop -- seed materialization retries must remain sequential */
   for (let attempt = 0; attempt < 6; attempt++) {
     fetched = await fetchSeedFromContract(contractId, rpcUrl);
     if (fetched !== null) {
@@ -52,16 +45,12 @@ async function ensureSeed(): Promise<void> {
       await new Promise((r) => setTimeout(r, 5000));
     }
   }
+  /* eslint-enable no-await-in-loop */
 
   // Seed not yet materialized — worker 0 bumps it via the relayer (if configured),
   // then waits briefly for the chain to confirm before retrying once.
   if (fetched === null && workerId === 0 && relayerApiKey) {
-    const bumped = await bumpSeedViaRelayer(
-      contractId,
-      rpcUrl,
-      relayerBaseUrl,
-      relayerApiKey,
-    );
+    const bumped = await bumpSeedViaRelayer(contractId, rpcUrl, relayerBaseUrl, relayerApiKey);
     if (bumped.success) {
       if (bumped.seed !== null) {
         fetched = bumped.seed;
@@ -115,6 +104,7 @@ async function runOneGame(): Promise<void> {
   (game as unknown as { autopilot: Autopilot }).autopilot.setEnabled(true);
 
   let frame = 0;
+  /* eslint-disable no-await-in-loop -- periodic Bun.sleep(0) yields are intentional within the simulation loop */
   while (frame < MAX_FRAMES) {
     game.stepSimulation();
     frame++;
@@ -124,6 +114,7 @@ async function runOneGame(): Promise<void> {
     // can give time to other processes instead of pinning the core at 100%.
     if (frame % 6000 === 0) await Bun.sleep(0);
   }
+  /* eslint-enable no-await-in-loop */
 
   const score = game.getScore();
 
@@ -152,10 +143,7 @@ async function runOneGame(): Promise<void> {
 
     // Explorers: warm restart when stuck — blend global best with random
     // to keep some learned structure while exploring new territory.
-    if (
-      role === "explore" &&
-      gamesWithoutImprovement >= EXPLORER_RESTART_THRESHOLD
-    ) {
+    if (role === "explore" && gamesWithoutImprovement >= EXPLORER_RESTART_THRESHOLD) {
       bestConfig = warmRestartConfig(globalBestConfig);
       bestScore = 0;
       gamesWithoutImprovement = 0;
@@ -179,7 +167,7 @@ async function runOneGame(): Promise<void> {
   }
 }
 
-self.onmessage = (event: MessageEvent<MainToWorkerMessage>) => {
+self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
   const msg = event.data;
   switch (msg.type) {
     case "start":
@@ -234,4 +222,4 @@ self.onmessage = (event: MessageEvent<MainToWorkerMessage>) => {
       }
       break;
   }
-};
+});

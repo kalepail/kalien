@@ -145,11 +145,13 @@ mock.module("../../worker/leaderboard-store", () => ({
   writeProofTapeMapping: async () => undefined,
 }));
 
+function MockProofCoordinatorDO() {}
+
 mock.module("../../worker/durable/coordinator", () => ({
   coordinatorStub: (env: WorkerEnv) =>
     (env as WorkerEnv & { __coordinator: Record<string, unknown> }).__coordinator,
   asPublicJob: <T>(job: T): T => job,
-  ProofCoordinatorDO: class ProofCoordinatorDO {},
+  ProofCoordinatorDO: MockProofCoordinatorDO,
 }));
 
 afterAll(() => {

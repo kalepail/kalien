@@ -13,7 +13,11 @@ import {
   rpc,
   scValToNative,
 } from "@stellar/stellar-sdk";
-import { loadSmartWalletModule } from "../wallet/loader";
+import {
+  getSmartAccountConfig,
+  getSmartAccountKit,
+  signTransactionWithDeployer,
+} from "../wallet/smartAccount";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -127,9 +131,8 @@ export async function getSwapQuote(
   amountIn: bigint,
   slippageBps = 300,
 ): Promise<SwapQuote> {
-  const walletModule = await loadSmartWalletModule();
-  const config = walletModule.getSmartAccountConfig();
-  const kit = walletModule.getSmartAccountKit();
+  const config = getSmartAccountConfig();
+  const kit = getSmartAccountKit();
 
   const server = new rpc.Server(config.rpcUrl);
   const router = new Contract(swapCfg.soroswapRouter);
@@ -180,9 +183,8 @@ export async function executeSwap(
   toAddress: string,
   credentialId: string,
 ): Promise<{ hash: string }> {
-  const walletModule = await loadSmartWalletModule();
-  const config = walletModule.getSmartAccountConfig();
-  const kit = walletModule.getSmartAccountKit();
+  const config = getSmartAccountConfig();
+  const kit = getSmartAccountKit();
 
   const server = new rpc.Server(config.rpcUrl);
   const router = new Contract(swapCfg.soroswapRouter);
@@ -238,7 +240,7 @@ export async function executeSwap(
     signedAuth,
     config.networkPassphrase,
     (rebuiltTx) => {
-      walletModule.signTransactionWithDeployer(rebuiltTx, kit);
+      signTransactionWithDeployer(rebuiltTx, kit);
     },
   );
 

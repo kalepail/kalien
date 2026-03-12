@@ -4,8 +4,7 @@ import { URL } from "node:url";
 import { scValToNative, xdr } from "@stellar/stellar-base";
 
 const PORT = Number.parseInt(process.env.ADAPTER_PORT || "4041", 10);
-const RPC_URL =
-  process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
+const RPC_URL = process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
 
 const SCORE_EVENT_KEYS = new Set(["score_submitted"]);
 
@@ -65,10 +64,7 @@ function toInt(value: unknown): number | null {
   }
 
   if (typeof value === "bigint") {
-    if (
-      value > BigInt(Number.MAX_SAFE_INTEGER) ||
-      value < BigInt(Number.MIN_SAFE_INTEGER)
-    ) {
+    if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
       return null;
     }
     return Number(value);
@@ -112,9 +108,7 @@ function readMapValue(mapLike: unknown, keys: string[]): unknown {
 
 function normalizeEvent(raw: RawEvent): NormalizedEvent | null {
   const topic =
-    Array.isArray(raw.topic) && raw.topic.length > 0
-      ? decodeScValBase64(raw.topic[0])
-      : null;
+    Array.isArray(raw.topic) && raw.topic.length > 0 ? decodeScValBase64(raw.topic[0]) : null;
   const eventName = normalizeEventKey(typeof topic === "string" ? topic : null);
   if (!eventName || !SCORE_EVENT_KEYS.has(eventName)) {
     return null;
@@ -166,13 +160,9 @@ function normalizeEvent(raw: RawEvent): NormalizedEvent | null {
     minted_delta: mintedDelta,
     tx_hash: typeof raw.txHash === "string" ? raw.txHash : null,
     event_index:
-      raw.operationIndex != null && Number.isFinite(raw.operationIndex)
-        ? raw.operationIndex
-        : 0,
-    ledger:
-      raw.ledger != null && Number.isFinite(raw.ledger) ? raw.ledger : null,
-    closed_at:
-      typeof raw.ledgerClosedAt === "string" ? raw.ledgerClosedAt : null,
+      raw.operationIndex != null && Number.isFinite(raw.operationIndex) ? raw.operationIndex : 0,
+    ledger: raw.ledger != null && Number.isFinite(raw.ledger) ? raw.ledger : null,
+    closed_at: typeof raw.ledgerClosedAt === "string" ? raw.ledgerClosedAt : null,
   };
 }
 
@@ -190,9 +180,7 @@ interface RpcGetEventsParams {
 
 async function handleEvents(url: URL, res: http.ServerResponse): Promise<void> {
   const requestedEventName = url.searchParams.get("event_name");
-  const requestedEventKey = normalizeEventKey(
-    requestedEventName || "score_submitted",
-  );
+  const requestedEventKey = normalizeEventKey(requestedEventName || "score_submitted");
   if (!requestedEventKey || !SCORE_EVENT_KEYS.has(requestedEventKey)) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ events: [], next_cursor: null }));
@@ -223,7 +211,10 @@ async function handleEvents(url: URL, res: http.ServerResponse): Promise<void> {
   };
 
   if (contractId && contractId.trim().length > 0) {
-    params.filters[0]!.contractIds = [contractId.trim()];
+    const [firstFilter] = params.filters;
+    if (firstFilter) {
+      firstFilter.contractIds = [contractId.trim()];
+    }
   }
 
   const fromLedger = Number.parseInt(fromLedgerRaw || "", 10);
@@ -262,9 +253,7 @@ async function handleEvents(url: URL, res: http.ServerResponse): Promise<void> {
   const payload = (await rpcResponse.json()) as {
     result?: { events?: RawEvent[]; cursor?: string; latestLedger?: number };
   };
-  const events = Array.isArray(payload?.result?.events)
-    ? payload.result!.events
-    : [];
+  const events = Array.isArray(payload?.result?.events) ? (payload.result?.events ?? []) : [];
   const normalized: NormalizedEvent[] = [];
   for (const event of events) {
     const mapped = normalizeEvent(event);
@@ -277,10 +266,7 @@ async function handleEvents(url: URL, res: http.ServerResponse): Promise<void> {
   res.end(
     JSON.stringify({
       events: normalized,
-      next_cursor:
-        typeof payload?.result?.cursor === "string"
-          ? payload.result.cursor
-          : null,
+      next_cursor: typeof payload?.result?.cursor === "string" ? payload.result.cursor : null,
       latest_ledger: payload?.result?.latestLedger ?? null,
     }),
   );
@@ -288,10 +274,7 @@ async function handleEvents(url: URL, res: http.ServerResponse): Promise<void> {
 
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(
-      req.url || "/",
-      `http://${req.headers.host || "127.0.0.1"}`,
-    );
+    const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
 
     if (req.method === "GET" && url.pathname === "/events") {
       await handleEvents(url, res);

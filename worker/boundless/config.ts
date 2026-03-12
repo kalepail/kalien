@@ -50,6 +50,8 @@ export interface BoundlessConfig {
   // USD-denominated pricing — resolved to wei at submission time via Chainlink ETH/USD feed
   maxPriceUsd: number;
   minPriceUsd: number;
+  // ZKC collateral in raw 18-decimal base units for the on-chain lockCollateral field.
+  lockCollateralBaseUnits: bigint;
   topUpBufferBps: number;
   pollTimeoutMs: number;
   // Auction shape (reverse Dutch auction) — all in seconds (contract uses block.timestamp)
@@ -64,6 +66,33 @@ export interface BoundlessConfig {
   deploymentBlock: bigint;
   // IPFS upload (required for inputs > MAX_INLINE_STDIN_BYTES)
   pinataJwt: string | null;
+}
+
+const ZKC_DECIMALS = 18;
+const DEFAULT_BOUNDLESS_LOCK_COLLATERAL_BASE_UNITS = 5n * 10n ** 18n;
+
+function parseNonNegativeFloat(value: string | undefined, fallback: number): number {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallback;
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseLockCollateralBaseUnits(value: string | undefined): bigint {
+  const trimmed = value?.trim();
+  if (!trimmed) return DEFAULT_BOUNDLESS_LOCK_COLLATERAL_BASE_UNITS;
+  if (!/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    return DEFAULT_BOUNDLESS_LOCK_COLLATERAL_BASE_UNITS;
+  }
+
+  const [wholePart, fractionPart = ""] = trimmed.split(".");
+  if (fractionPart.length > ZKC_DECIMALS) {
+    return DEFAULT_BOUNDLESS_LOCK_COLLATERAL_BASE_UNITS;
+  }
+
+  const whole = BigInt(wholePart);
+  const fraction = BigInt((fractionPart + "0".repeat(ZKC_DECIMALS)).slice(0, ZKC_DECIMALS));
+  return whole * 10n ** BigInt(ZKC_DECIMALS) + fraction;
 }
 
 export function resolveBoundlessConfig(env: WorkerEnv): BoundlessConfig | null {
@@ -96,12 +125,9 @@ export function resolveBoundlessConfig(env: WorkerEnv): BoundlessConfig | null {
     ? BigInt(deploymentBlockRaw)
     : (knownDeployment?.deploymentBlock ?? DEFAULT_DEPLOYMENT.deploymentBlock);
 
-  const maxPriceUsd = env.BOUNDLESS_MAX_PRICE_USD
-    ? Number.parseFloat(env.BOUNDLESS_MAX_PRICE_USD)
-    : 0.02; // $0.02 default — resolved to wei at submission time via Chainlink
-  const minPriceUsd = env.BOUNDLESS_MIN_PRICE_USD
-    ? Number.parseFloat(env.BOUNDLESS_MIN_PRICE_USD)
-    : 0.0002; // ~1% of max — auction floor
+  const maxPriceUsd = parseNonNegativeFloat(env.BOUNDLESS_MAX_PRICE_USD, 0.1);
+  const minPriceUsd = parseNonNegativeFloat(env.BOUNDLESS_MIN_PRICE_USD, 0);
+  const lockCollateralBaseUnits = parseLockCollateralBaseUnits(env.BOUNDLESS_LOCK_COLLATERAL_ZKC);
   const topUpBufferBpsRaw = env.BOUNDLESS_TOP_UP_BUFFER_BPS?.trim();
   const parsedTopUpBufferBps = topUpBufferBpsRaw ? Number.parseInt(topUpBufferBpsRaw, 10) : NaN;
   const topUpBufferBps = Number.isFinite(parsedTopUpBufferBps)
@@ -138,6 +164,7 @@ export function resolveBoundlessConfig(env: WorkerEnv): BoundlessConfig | null {
     imageId: normalizedImageId as `0x${string}`,
     maxPriceUsd,
     minPriceUsd,
+    lockCollateralBaseUnits,
     topUpBufferBps,
     pollTimeoutMs,
     flatPeriodSec,

@@ -83,6 +83,8 @@ let proofClaimIndexLookupCalls = 0;
 let proofArtifactsHeadCalls = 0;
 const proofTapeMappingWrites: Array<{ txHash: string; proofJobId: string }> = [];
 
+function MockProofCoordinatorDO() {}
+
 mock.module("../../worker/leaderboard-store", () => ({
   createLeaderboardProfileAuthChallenge: async () => undefined,
   getLeaderboardIngestionState: async () => EXAMPLE_INGESTION_STATE,
@@ -145,7 +147,7 @@ mock.module("../../worker/durable/coordinator", () => ({
   coordinatorStub: (env: WorkerEnv) =>
     (env as WorkerEnv & { __coordinator: Record<string, unknown> }).__coordinator,
   asPublicJob: <T>(job: T): T => job,
-  ProofCoordinatorDO: class ProofCoordinatorDO {},
+  ProofCoordinatorDO: MockProofCoordinatorDO,
 }));
 
 afterAll(() => {
@@ -186,7 +188,7 @@ function makeCoordinatorStub(overrides: Record<string, unknown> = {}): Record<st
 
 function makeMockD1Database(): D1Database {
   return {
-    prepare: (query: string) => ({
+    prepare: (_query: string) => ({
       bind: () => ({
         run: async () => ({ success: true }),
         all: async () => ({ results: [] }),
@@ -299,8 +301,9 @@ describe("API routes", () => {
           privateKey: "0xmalformed-private-key",
           imageUrl: "https://example.com/image",
           imageId: ("0x" + "11".repeat(32)) as `0x${string}`,
-          maxPriceUsd: 0.02,
-          minPriceUsd: 0.0002,
+          maxPriceUsd: 0.1,
+          minPriceUsd: 0,
+          lockCollateralBaseUnits: 5n * 10n ** 18n,
           topUpBufferBps: 1500,
           pollIntervalMs: 5000,
           pollTimeoutMs: 60000,

@@ -26,9 +26,7 @@ const data = new Uint8Array(readFileSync(tapePath));
 const tape = deserializeTape(data, DEFAULT_MAX_FRAMES);
 
 console.log(`Tape: ${tapePath}`);
-console.log(
-  `  Seed:       0x${tape.header.seed.toString(16).toUpperCase().padStart(8, "0")}`,
-);
+console.log(`  Seed:       0x${tape.header.seed.toString(16).toUpperCase().padStart(8, "0")}`);
 console.log(`  Frames:     ${tape.header.frameCount}`);
 console.log(`  Exp. Score:  ${tape.footer.finalScore}`);
 console.log();
@@ -63,9 +61,7 @@ if (scoreOk) {
   console.log("\nVERIFICATION PASSED");
   process.exit(0);
 } else {
-  console.error(
-    `  Score mismatch: got ${actualScore}, expected ${tape.footer.finalScore}`,
-  );
+  console.error(`  Score mismatch: got ${actualScore}, expected ${tape.footer.finalScore}`);
   console.error("\nVERIFICATION FAILED");
   process.exit(1);
 }

@@ -4,6 +4,8 @@ export const DEFAULT_SMART_ACCOUNT_INDEXER_URL =
   "https://smart-account-indexer.sdf-ecosystem.workers.dev";
 export const DEFAULT_SMART_ACCOUNT_INDEXER_TIMEOUT_MS = 10_000;
 
+import { Client } from "smart-account-kit-bindings";
+
 export class LeaderboardCredentialBindingError extends Error {
   readonly retryable: boolean;
   readonly statusCode: number;
@@ -213,7 +215,6 @@ export async function fetchCredentialPublicKeyFromChain({
   const credentialIdBytes = decodeBase64UrlString(credentialIdBase64Url);
 
   const fetchFromChain = async (): Promise<string> => {
-    const { Client } = await import("smart-account-kit-bindings");
     const client = new Client({
       contractId: contractAddress,
       networkPassphrase,

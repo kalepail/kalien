@@ -162,7 +162,7 @@ class MockSql {
       const [claimantAddress, limitRaw, offsetRaw] = params as [string, number, number];
       const rows = [...this.rows.values()]
         .filter((row) => row.claimant_address === claimantAddress)
-        .sort((left, right) => right.created_at.localeCompare(left.created_at))
+        .toSorted((left, right) => right.created_at.localeCompare(left.created_at))
         .slice(offsetRaw, offsetRaw + limitRaw)
         .map((row) => ({ data: row.data }));
       return new MockSqlResult(rows);
@@ -192,9 +192,7 @@ class MockStorage {
 
 type CoordinatorHarness = ReturnType<typeof createCoordinatorHarness>;
 
-function createCoordinatorHarness(
-  envOverrides: Partial<WorkerEnv> = {},
-): {
+function createCoordinatorHarness(envOverrides: Partial<WorkerEnv> = {}): {
   coordinator: ProofCoordinatorDO;
   storage: MockStorage;
   claimQueueSends: Array<{ jobId: string }>;
@@ -643,7 +641,9 @@ describe("ProofCoordinatorDO state machine", () => {
     expect(job?.prover.activeAttemptIndex).toBe(1);
     expect(job?.claim.activeAttemptIndex).toBe(1);
     expect(stored?.proverAttempts[0]?.outcome).toBe("failed");
-    expect(stored?.proverAttempts[0]?.error).toContain("recovered stale in-progress prover attempt");
+    expect(stored?.proverAttempts[0]?.error).toContain(
+      "recovered stale in-progress prover attempt",
+    );
     expect(stored?.claimAttempts[0]?.outcome).toBe("failed");
     expect(stored?.claimAttempts[0]?.error).toContain("recovered stale in-progress claim attempt");
     expect(stored?.queue.activeDeliveryId).toBeNull();

@@ -8,9 +8,13 @@ import {
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 
+function MockIndexedDBStorage() {}
+
+function MockSmartAccountKit() {}
+
 mock.module("smart-account-kit", () => ({
-  IndexedDBStorage: class MockIndexedDBStorage {},
-  SmartAccountKit: class MockSmartAccountKit {},
+  IndexedDBStorage: MockIndexedDBStorage,
+  SmartAccountKit: MockSmartAccountKit,
   validateAddress: () => undefined,
 }));
 
@@ -62,8 +66,11 @@ describe("signBuiltDeploymentTransaction", () => {
     signBuiltDeploymentTransaction(deployTx, deployerKeypair);
 
     expect(deployTx.signed).toBe(builtTransaction);
-    expect(BigInt(deployTx.signed!.fee)).toBe(classicFee + resourceFee);
-    expect(deployTx.signed!.signatures).toHaveLength(1);
+    if (!deployTx.signed) {
+      throw new Error("expected deployment transaction to be signed");
+    }
+    expect(BigInt(deployTx.signed.fee)).toBe(classicFee + resourceFee);
+    expect(deployTx.signed.signatures).toHaveLength(1);
   });
 
   it("fails fast when the deploy transaction was not built", () => {

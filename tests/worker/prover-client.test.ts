@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   describeProverHealthError,
   summarizeProof,
@@ -6,16 +6,12 @@ import {
   submitToProver,
   pollProverOnce,
 } from "../../worker/prover/client";
-import {
-  EXPECTED_RULES_DIGEST,
-  EXPECTED_RULESET,
-} from "../../worker/constants";
+import { EXPECTED_RULES_DIGEST, EXPECTED_RULESET } from "../../worker/constants";
 import type { WorkerEnv } from "../../worker/env";
 import type { ProverGetJobResponse } from "../../worker/types";
 
 const VALID_IMAGE_ID = "a".repeat(64);
-const TEST_CLAIMANT =
-  "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const TEST_CLAIMANT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 
 function makeEnv(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
   return {
@@ -149,7 +145,10 @@ describe("prover client", () => {
 
     it("throws for zero final_score", () => {
       const response = validProverGetJobResponse();
-      response.result!.proof.journal.final_score = 0;
+      if (!response.result) {
+        throw new Error("expected prover result");
+      }
+      response.result.proof.journal.final_score = 0;
       expect(() => summarizeProof(response)).toThrow("zero-score");
     });
   });
@@ -184,8 +183,7 @@ describe("prover client", () => {
 
     it("throws retryable error for 500 response", async () => {
       const originalFetch = globalThis.fetch;
-      globalThis.fetch = (async () =>
-        new Response("error", { status: 500 })) as typeof fetch;
+      globalThis.fetch = (async () => new Response("error", { status: 500 })) as typeof fetch;
       try {
         await getValidatedProverHealth(makeEnv(), { forceRefresh: true });
         expect.unreachable("should have thrown");
@@ -200,10 +198,10 @@ describe("prover client", () => {
     it("throws non-retryable for invalid image_id format", async () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = (async () =>
-        new Response(
-          JSON.stringify({ ...validHealthPayload(), image_id: "not-hex" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        )) as typeof fetch;
+        new Response(JSON.stringify({ ...validHealthPayload(), image_id: "not-hex" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch;
       try {
         await getValidatedProverHealth(makeEnv(), { forceRefresh: true });
         expect.unreachable("should have thrown");
@@ -219,10 +217,10 @@ describe("prover client", () => {
     it("throws non-retryable for rules digest mismatch", async () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = (async () =>
-        new Response(
-          JSON.stringify({ ...validHealthPayload(), rules_digest: 0xdeadbeef }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        )) as typeof fetch;
+        new Response(JSON.stringify({ ...validHealthPayload(), rules_digest: 0xdeadbeef }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch;
       try {
         await getValidatedProverHealth(makeEnv(), { forceRefresh: true });
         expect.unreachable("should have thrown");
@@ -238,10 +236,10 @@ describe("prover client", () => {
     it("throws non-retryable for ruleset mismatch", async () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = (async () =>
-        new Response(
-          JSON.stringify({ ...validHealthPayload(), ruleset: "WRONG" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        )) as typeof fetch;
+        new Response(JSON.stringify({ ...validHealthPayload(), ruleset: "WRONG" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch;
       try {
         await getValidatedProverHealth(makeEnv(), { forceRefresh: true });
         expect.unreachable("should have thrown");
@@ -263,10 +261,9 @@ describe("prover client", () => {
           headers: { "content-type": "application/json" },
         })) as typeof fetch;
       try {
-        await getValidatedProverHealth(
-          makeEnv({ PROVER_EXPECTED_IMAGE_ID: otherImageId }),
-          { forceRefresh: true },
-        );
+        await getValidatedProverHealth(makeEnv({ PROVER_EXPECTED_IMAGE_ID: otherImageId }), {
+          forceRefresh: true,
+        });
         expect.unreachable("should have thrown");
       } catch (error) {
         const desc = describeProverHealthError(error);
@@ -313,6 +310,7 @@ describe("prover client", () => {
           expect(result.jobId).toBe("prover-job-1");
           expect(result.statusUrl).toBe("/api/jobs/prover-job-1");
         }
+        expect(callCount).toBeGreaterThan(0);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -328,12 +326,9 @@ describe("prover client", () => {
             headers: { "content-type": "application/json" },
           });
         }
-        return new Response(
-          JSON.stringify({ success: false, error: "rate limited" }),
-          {
-            status: 429,
-          },
-        );
+        return new Response(JSON.stringify({ success: false, error: "rate limited" }), {
+          status: 429,
+        });
       }) as typeof fetch;
       try {
         const result = await submitToProver(makeEnv(), tapeBytes, {
@@ -439,8 +434,7 @@ describe("prover client", () => {
 
     it("returns retry with clearProverJob for 404", async () => {
       const originalFetch = globalThis.fetch;
-      globalThis.fetch = (async () =>
-        new Response("not found", { status: 404 })) as typeof fetch;
+      globalThis.fetch = (async () => new Response("not found", { status: 404 })) as typeof fetch;
       try {
         const result = await pollProverOnce(makeEnv(), "job-1");
         expect(result.type).toBe("retry");
@@ -456,9 +450,7 @@ describe("prover client", () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = (async () =>
         new Response(
-          JSON.stringify(
-            validProverGetJobResponse({ status: "running", result: undefined }),
-          ),
+          JSON.stringify(validProverGetJobResponse({ status: "running", result: undefined })),
           { status: 200, headers: { "content-type": "application/json" } },
         )) as typeof fetch;
       try {

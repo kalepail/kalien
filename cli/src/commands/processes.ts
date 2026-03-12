@@ -35,9 +35,7 @@ export async function psCommand(): Promise<void> {
 export async function cleanupCommand(opts: CleanupOptions): Promise<void> {
   const minAgeSec = parseOlderThan(opts.olderThan);
   if (opts.olderThan && minAgeSec === null) {
-    console.error(
-      'Error: --older-than expects a duration like "30s", "10m", "2h", or "1d".',
-    );
+    console.error('Error: --older-than expects a duration like "30s", "10m", "2h", or "1d".');
     process.exit(1);
   }
 
@@ -58,20 +56,12 @@ export async function cleanupCommand(opts: CleanupOptions): Promise<void> {
 
   if (opts.dryRun) {
     console.log(
-      ansi.color(
-        ansi.yellow,
-        `Dry run: would terminate ${processes.length} process(es).`,
-      ),
+      ansi.color(ansi.yellow, `Dry run: would terminate ${processes.length} process(es).`),
     );
     return;
   }
 
-  console.log(
-    ansi.color(
-      ansi.yellow,
-      `Sending SIGTERM to ${processes.length} process(es)...`,
-    ),
-  );
+  console.log(ansi.color(ansi.yellow, `Sending SIGTERM to ${processes.length} process(es)...`));
 
   const termSent: number[] = [];
   for (const proc of processes) {
@@ -85,10 +75,7 @@ export async function cleanupCommand(opts: CleanupOptions): Promise<void> {
 
   if (stillRunning.length > 0) {
     console.log(
-      ansi.color(
-        ansi.yellow,
-        `Escalating ${stillRunning.length} process(es) to SIGKILL...`,
-      ),
+      ansi.color(ansi.yellow, `Escalating ${stillRunning.length} process(es) to SIGKILL...`),
     );
     for (const pid of stillRunning) {
       sendSignal(pid, "SIGKILL");
@@ -96,18 +83,11 @@ export async function cleanupCommand(opts: CleanupOptions): Promise<void> {
     await waitForExit(stillRunning, KILL_WAIT_MS);
   }
 
-  const remaining = processes
-    .map((p) => p.pid)
-    .filter((pid) => isProcessAlive(pid));
+  const remaining = processes.map((p) => p.pid).filter((pid) => isProcessAlive(pid));
   const killedCount = processes.length - remaining.length;
 
   if (remaining.length === 0) {
-    console.log(
-      ansi.color(
-        ansi.green,
-        `Cleanup complete. Terminated ${killedCount} process(es).`,
-      ),
-    );
+    console.log(ansi.color(ansi.green, `Cleanup complete. Terminated ${killedCount} process(es).`));
     return;
   }
 
@@ -128,9 +108,7 @@ function listKalienRunProcesses(): KalienRunProcess[] {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("PID")) continue;
 
-    const match = line.match(
-      /^\s*(\d+)\s+(\d+)\s+([^\s]+)\s+([0-9]+(?:\.[0-9]+)?)\s+(.+)$/,
-    );
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+([^\s]+)\s+([0-9]+(?:\.[0-9]+)?)\s+(.+)$/);
     if (!match) continue;
 
     const [, pidRaw, ppidRaw, elapsed, cpuRaw, commandRaw] = match;
@@ -227,10 +205,7 @@ function printProcessTable(processes: KalienRunProcess[]): void {
   console.log(ansi.color(ansi.brightWhite, header));
   for (const proc of processes) {
     const orphanLabel = proc.orphan ? "yes" : "no";
-    const orphanCell = ansi.color(
-      proc.orphan ? ansi.yellow : ansi.dim,
-      orphanLabel.padEnd(10),
-    );
+    const orphanCell = ansi.color(proc.orphan ? ansi.yellow : ansi.dim, orphanLabel.padEnd(10));
     const row =
       `${String(proc.pid).padEnd(8)}${String(proc.ppid).padEnd(8)}` +
       `${proc.elapsed.padEnd(12)}${proc.cpuPct.toFixed(1).padEnd(8)}` +
@@ -245,9 +220,7 @@ function sendSignal(pid: number, signal: NodeJS.Signals): boolean {
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(
-      ansi.color(ansi.red, `Failed to send ${signal} to ${pid}: ${msg}`),
-    );
+    console.error(ansi.color(ansi.red, `Failed to send ${signal} to ${pid}: ${msg}`));
     return false;
   }
 }
@@ -256,7 +229,7 @@ function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (err: any) {
+  } catch (err: unknown) {
     return err?.code !== "ESRCH";
   }
 }
@@ -265,11 +238,13 @@ async function waitForExit(pids: number[], timeoutMs: number): Promise<void> {
   if (pids.length === 0) return;
   const deadline = Date.now() + timeoutMs;
 
+  /* eslint-disable no-await-in-loop -- process exit polling must remain sequential */
   while (Date.now() < deadline) {
     const alive = pids.some((pid) => isProcessAlive(pid));
     if (!alive) return;
     await sleep(150);
   }
+  /* eslint-enable no-await-in-loop */
 }
 
 function sleep(ms: number): Promise<void> {

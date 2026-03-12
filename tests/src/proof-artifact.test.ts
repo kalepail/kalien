@@ -36,9 +36,7 @@ describe("extractGroth16SealFromArtifact", () => {
       seal_hex: "00".repeat(260),
     };
 
-    expect(() => extractGroth16SealFromArtifact(artifact)).toThrow(
-      "unsupported proof artifact",
-    );
+    expect(() => extractGroth16SealFromArtifact(artifact)).toThrow("unsupported proof artifact");
   });
 });
 

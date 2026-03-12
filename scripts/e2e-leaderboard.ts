@@ -27,8 +27,7 @@ let MAX_FRAMES = 6_000; // ~100s of gameplay, keeps proofs fast
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--runs" && args[i + 1]) NUM_RUNS = parseInt(args[++i], 10);
-  if (args[i] === "--max-frames" && args[i + 1])
-    MAX_FRAMES = parseInt(args[++i], 10);
+  if (args[i] === "--max-frames" && args[i + 1]) MAX_FRAMES = parseInt(args[++i], 10);
 }
 
 // ── Tape generation ─────────────────────────────────────────────────
@@ -41,11 +40,7 @@ interface TapeInfo {
   bytes: Uint8Array;
 }
 
-function generateTape(
-  seed: number,
-  maxFrames: number,
-  outputPath: string,
-): TapeInfo {
+function generateTape(seed: number, maxFrames: number, outputPath: string): TapeInfo {
   // Generate tape using headless game + built-in autopilot
   const game = new AsteroidsGame({ headless: true, seed });
   game.startNewGame(seed);
@@ -116,16 +111,13 @@ async function submitTape(tape: TapeInfo): Promise<string> {
     claimant: CLAIMANT,
     seed_id: String(seedId >>> 0),
   });
-  const response = await fetch(
-    `${BASE_URL}/api/proofs/jobs?${params.toString()}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-      },
-      body: new Uint8Array(tape.bytes),
+  const response = await fetch(`${BASE_URL}/api/proofs/jobs?${params.toString()}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
     },
-  );
+    body: new Uint8Array(tape.bytes),
+  });
 
   if (!response.ok) {
     const text = await response.text();
@@ -151,12 +143,10 @@ async function getJobStatus(jobId: string): Promise<JobStatus> {
   return data.job;
 }
 
-async function waitForJob(
-  jobId: string,
-  timeoutMs = 600_000,
-): Promise<JobStatus> {
+async function waitForJob(jobId: string, timeoutMs = 600_000): Promise<JobStatus> {
   const deadline = Date.now() + timeoutMs;
 
+  /* eslint-disable no-await-in-loop -- job polling must remain sequential */
   while (Date.now() < deadline) {
     const status = await getJobStatus(jobId);
 
@@ -173,6 +163,7 @@ async function waitForJob(
 
     await new Promise((r) => setTimeout(r, 5_000));
   }
+  /* eslint-enable no-await-in-loop */
 
   // If we timed out but proof succeeded, return what we have
   const finalStatus = await getJobStatus(jobId);
@@ -243,9 +234,7 @@ async function main() {
   );
 
   // Step 1: Generate tapes
-  console.log(
-    `--- Step 1: Generating ${NUM_RUNS} tapes (max ${MAX_FRAMES} frames each) ---`,
-  );
+  console.log(`--- Step 1: Generating ${NUM_RUNS} tapes (max ${MAX_FRAMES} frames each) ---`);
   const tapes: TapeInfo[] = [];
   const tmpDir = "/tmp/claude";
 
@@ -269,16 +258,12 @@ async function main() {
   console.log(`  ${validTapes.length} valid tapes to submit\n`);
 
   if (validTapes.length === 0) {
-    console.error(
-      "No valid tapes generated (all zero score). Increase --max-frames.",
-    );
+    console.error("No valid tapes generated (all zero score). Increase --max-frames.");
     process.exit(1);
   }
 
   // Step 2: Submit each tape and wait for completion (sequential, single-active-job)
-  console.log(
-    `--- Step 2: Submitting ${validTapes.length} tapes through pipeline ---`,
-  );
+  console.log(`--- Step 2: Submitting ${validTapes.length} tapes through pipeline ---`);
 
   interface RunResult {
     tape: TapeInfo;
@@ -291,6 +276,7 @@ async function main() {
   const results: RunResult[] = [];
   const errors: { tape: TapeInfo; error: string }[] = [];
 
+  /* eslint-disable no-await-in-loop -- pipeline submissions are intentionally serialized */
   for (let i = 0; i < validTapes.length; i++) {
     const tape = validTapes[i];
     const startMs = Date.now();
@@ -302,9 +288,7 @@ async function main() {
       );
 
       const jobId = await submitTape(tape);
-      console.log(
-        `  ${label} Job ${jobId} queued, waiting for proof + claim...`,
-      );
+      console.log(`  ${label} Job ${jobId} queued, waiting for proof + claim...`);
 
       const finalStatus = await waitForJob(jobId);
       const durationMs = Date.now() - startMs;
@@ -328,11 +312,10 @@ async function main() {
       console.error(`  ${label} FAILED: ${msg}`);
     }
   }
+  /* eslint-enable no-await-in-loop */
 
   // Step 3: Wait for on-chain events to become available, then sync leaderboard
-  console.log(
-    `\n--- Step 3: Waiting for on-chain events & syncing leaderboard ---`,
-  );
+  console.log(`\n--- Step 3: Waiting for on-chain events & syncing leaderboard ---`);
 
   const claimedResults = results.filter((r) => r.claimTxHash);
   if (claimedResults.length === 0) {
@@ -346,7 +329,9 @@ async function main() {
   await new Promise((r) => setTimeout(r, 20_000));
 
   // Find the ledger range of our claims by checking the RPC
-  const claimTxHashes = claimedResults.map((r) => r.claimTxHash!);
+  const claimTxHashes = new Set(
+    claimedResults.flatMap((result) => (result.claimTxHash ? [result.claimTxHash] : [])),
+  );
   console.log(`  ${claimedResults.length} claims to verify on leaderboard`);
 
   // Use the dev/seed endpoint to manually ingest the events from RPC
@@ -376,9 +361,7 @@ async function main() {
     console.log(`  RPC latest ledger: ${latestLedger}`);
   } catch (error) {
     console.error(`  Failed to reach RPC: ${error}`);
-    console.warn(
-      "  Skipping RPC event verification — manually seed events below",
-    );
+    console.warn("  Skipping RPC event verification — manually seed events below");
     printSummary(results, errors, initialLb);
     process.exit(0);
   }
@@ -409,9 +392,7 @@ async function main() {
   }
 
   // Find our events by matching txHash
-  let ourEvents = rpcEvents.filter((e) =>
-    claimTxHashes.includes(e.txHash as string),
-  );
+  let ourEvents = rpcEvents.filter((e) => claimTxHashes.has(e.txHash as string));
   console.log(
     `  Found ${ourEvents.length}/${claimedResults.length} claim events on RPC (initial scan)`,
   );
@@ -421,6 +402,7 @@ async function main() {
     console.log(
       `  Waiting 15s and retrying for ${claimedResults.length - ourEvents.length} missing events...`,
     );
+    /* eslint-disable no-await-in-loop -- RPC indexing retry must remain sequential */
     await new Promise((r) => setTimeout(r, 15_000));
     try {
       const retryResp = await fetch(rpcUrl, {
@@ -441,21 +423,16 @@ async function main() {
         result?: { events: Array<Record<string, unknown>> };
       };
       const retryEvents = retryData.result?.events ?? [];
-      ourEvents = retryEvents.filter((e) =>
-        claimTxHashes.includes(e.txHash as string),
-      );
-      console.log(
-        `  Retry found ${ourEvents.length}/${claimedResults.length} claim events`,
-      );
+      ourEvents = retryEvents.filter((e) => claimTxHashes.has(e.txHash as string));
+      console.log(`  Retry found ${ourEvents.length}/${claimedResults.length} claim events`);
     } catch (error) {
       console.error(`  Retry failed: ${error}`);
     }
+    /* eslint-enable no-await-in-loop */
   }
 
   if (ourEvents.length > 0) {
-    console.log(
-      "  Manual dev seeding has been removed; waiting for scheduled leaderboard sync...",
-    );
+    console.log("  Manual dev seeding has been removed; waiting for scheduled leaderboard sync...");
     await new Promise((r) => setTimeout(r, 15_000));
   }
 
@@ -467,9 +444,7 @@ async function main() {
   );
 
   // Check if our claimant's scores appear
-  const playerResp = await fetch(
-    `${BASE_URL}/api/leaderboard/player/${CLAIMANT}`,
-  );
+  const playerResp = await fetch(`${BASE_URL}/api/leaderboard/player/${CLAIMANT}`);
   const playerData = (await playerResp.json()) as {
     player: {
       claimantAddress: string;
@@ -498,14 +473,7 @@ async function main() {
     }
   }
 
-  printSummary(
-    results,
-    errors,
-    initialLb,
-    finalLb,
-    matchedCount,
-    claimedResults.length,
-  );
+  printSummary(results, errors, initialLb, finalLb, matchedCount, claimedResults.length);
 
   // Cleanup tape files
   for (const tape of tapes) {
@@ -578,11 +546,7 @@ function printSummary(
     process.exit(1);
   }
 
-  if (
-    matchedCount !== undefined &&
-    claimedCount !== undefined &&
-    matchedCount < claimedCount
-  ) {
+  if (matchedCount !== undefined && claimedCount !== undefined && matchedCount < claimedCount) {
     console.error(
       `WARNING: Only ${matchedCount}/${claimedCount} claimed scores found on leaderboard`,
     );

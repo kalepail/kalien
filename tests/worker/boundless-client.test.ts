@@ -48,12 +48,8 @@ describe("fetchBoundlessCycles", () => {
         programCycles: 391,
         totalCycles: 422,
       });
-      expect(calledUrls[0]).toBe(
-        "https://d2mdvlnmyov1e1.cloudfront.net/v1/market/requests/0x123",
-      );
-      expect(calledUrls[1]).toBe(
-        "https://explorer.boundless.network/api/orders/0x123",
-      );
+      expect(calledUrls[0]).toBe("https://d2mdvlnmyov1e1.cloudfront.net/v1/market/requests/0x123");
+      expect(calledUrls[1]).toBe("https://explorer.boundless.network/api/orders/0x123");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -80,9 +76,7 @@ describe("fetchBoundlessCycles", () => {
         programCycles: 111,
         totalCycles: 222,
       });
-      expect(calledUrls).toEqual([
-        "https://explorer.boundless.network/api/orders/0x987",
-      ]);
+      expect(calledUrls).toEqual(["https://explorer.boundless.network/api/orders/0x987"]);
     } finally {
       globalThis.fetch = originalFetch;
     }

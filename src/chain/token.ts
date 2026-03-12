@@ -1,6 +1,6 @@
 import { Address, Asset, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { Client as ScoreClient } from "asteroids-score";
-import { loadSmartWalletModule } from "../wallet/loader";
+import { getSmartAccountConfig, getSmartAccountKit } from "../wallet/smartAccount";
 
 export interface TokenBalanceInput {
   walletAddress: string;
@@ -104,9 +104,8 @@ async function resolveSacAssetFromContractId(
 }
 
 async function resolveTokenContractId(scoreContractId: string): Promise<string> {
-  const walletModule = await loadSmartWalletModule();
-  const config = walletModule.getSmartAccountConfig();
-  const kit = walletModule.getSmartAccountKit();
+  const config = getSmartAccountConfig();
+  const kit = getSmartAccountKit();
 
   const scoreClient = new ScoreClient({
     contractId: scoreContractId,
@@ -129,8 +128,7 @@ export async function readTokenBalance(input: TokenBalanceInput): Promise<TokenB
     );
   }
 
-  const walletModule = await loadSmartWalletModule();
-  const config = walletModule.getSmartAccountConfig();
+  const config = getSmartAccountConfig();
   const server = new rpc.Server(config.rpcUrl);
   const holderAddress = Address.fromString(input.walletAddress).toString();
   const asset = await resolveSacAssetFromContractId(server, tokenContractId);

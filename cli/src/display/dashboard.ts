@@ -51,14 +51,10 @@ export function renderDashboard(stats: DashboardStats): void {
   } = stats;
 
   const elapsedSec = (Date.now() - startTime) / 1000;
-  const gamesPerMin =
-    elapsedSec > 0 ? ((totalGamesPlayed / elapsedSec) * 60).toFixed(1) : "0.0";
+  const gamesPerMin = elapsedSec > 0 ? ((totalGamesPlayed / elapsedSec) * 60).toFixed(1) : "0.0";
   const elapsedStr = formatDuration(elapsedSec);
   const epochStr = formatDuration(epochRemainingSec);
-  const shortAddr =
-    address.length > 12
-      ? `${address.slice(0, 6)}...${address.slice(-4)}`
-      : address;
+  const shortAddr = address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
 
   const hasThreshold = lastSubmittedScore > 0;
   const scoreColor = hasThreshold ? ansi.green : ansi.brightGreen;
@@ -130,9 +126,7 @@ export function renderDashboard(stats: DashboardStats): void {
   lines.push("");
 
   // Score section
-  lines.push(
-    `  ${ansi.color(ansi.gray, "Best:")}       ${ansi.color(scoreColor, scoreLabel)}`,
-  );
+  lines.push(`  ${ansi.color(ansi.gray, "Best:")}       ${ansi.color(scoreColor, scoreLabel)}`);
 
   if (onChainBestScore > 0) {
     lines.push(
@@ -156,9 +150,7 @@ export function renderDashboard(stats: DashboardStats): void {
     lines.push(`  ${ansi.color(ansi.gray, "Status:")}     ${lastSubmitStatus}`);
   }
   lines.push("");
-  lines.push(
-    `  ${ansi.color(ansi.dim, "E=exploit  x=explore  ★=global best    Ctrl+C to stop")}`,
-  );
+  lines.push(`  ${ansi.color(ansi.dim, "E=exploit  x=explore  ★=global best    Ctrl+C to stop")}`);
 
   // Clear previous output, write new
   const output =

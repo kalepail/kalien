@@ -21,9 +21,7 @@ describe("applyApiCacheControl", () => {
       },
     });
     const updated = applyApiCacheControl(response);
-    expect(updated.headers.get("cache-control")).toBe(
-      LEADERBOARD_CACHE_CONTROL,
-    );
+    expect(updated.headers.get("cache-control")).toBe(LEADERBOARD_CACHE_CONTROL);
   });
 
   it("falls back to a cloned response when headers are immutable", () => {

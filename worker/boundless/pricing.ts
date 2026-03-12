@@ -90,6 +90,35 @@ export function usdToWei(usd: number, ethPriceUsd: number): bigint {
   return (usdMicro * 10n ** 18n) / priceMicro;
 }
 
+export async function resolveUsdOfferToWei(options: {
+  rpcUrl: string;
+  chainId: number;
+  minPriceUsd: number;
+  maxPriceUsd: number;
+}): Promise<{
+  ethPriceUsd: number | null;
+  minPriceWei: bigint;
+  maxPriceWei: bigint;
+}> {
+  const minPriceUsd = options.minPriceUsd > 0 ? options.minPriceUsd : 0;
+  const maxPriceUsd = options.maxPriceUsd > 0 ? options.maxPriceUsd : 0;
+
+  if (minPriceUsd === 0 && maxPriceUsd === 0) {
+    return {
+      ethPriceUsd: null,
+      minPriceWei: 0n,
+      maxPriceWei: 0n,
+    };
+  }
+
+  const ethPriceUsd = await fetchEthPriceUsd(options.rpcUrl, options.chainId);
+  return {
+    ethPriceUsd,
+    minPriceWei: minPriceUsd === 0 ? 0n : usdToWei(minPriceUsd, ethPriceUsd),
+    maxPriceWei: maxPriceUsd === 0 ? 0n : usdToWei(maxPriceUsd, ethPriceUsd),
+  };
+}
+
 /**
  * Convert a wei amount to USD using the current ETH/USD price.
  * Inverse of usdToWei. Uses scaled integer arithmetic.

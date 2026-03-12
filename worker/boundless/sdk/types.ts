@@ -74,6 +74,8 @@ export interface BoundlessClientConfig {
   maxPriceUsd: number;
   /** Minimum price in USD (resolved to wei at submission via Chainlink) */
   minPriceUsd: number;
+  /** Prover lock collateral in raw 18-decimal ZKC base units. */
+  lockCollateralBaseUnits: bigint;
   /** JIT top-up buffer in basis points applied when topping up market balance. */
   topUpBufferBps: number;
   pollTimeoutMs: number;

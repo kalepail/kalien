@@ -36,16 +36,11 @@ function makeEnv(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
 
 describe("leaderboard ingestion source selection", () => {
   it("defaults source mode to auto so rpc uses fallback chain when configured", () => {
-    expect(
-      parseLeaderboardSourceMode(makeEnv({ GALEXIE_SOURCE_MODE: undefined })),
-    ).toBe("auto");
+    expect(parseLeaderboardSourceMode(makeEnv({ GALEXIE_SOURCE_MODE: undefined }))).toBe("auto");
   });
 
   it("defaults to rpc getEvents when source mode is not configured", async () => {
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url === "https://rpc-pro.lightsail.network/") {
         return jsonResponse({
@@ -69,10 +64,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("falls back from mainnet rpc-pro to archive-rpc-pro before galexie modes", async () => {
     const calledUrls: string[] = [];
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       calledUrls.push(url);
       if (url === "https://rpc-pro.lightsail.network/") {
@@ -118,10 +110,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("accepts comma-separated GALEXIE_RPC_BASE_URL candidates in priority order", async () => {
     const calledUrls: string[] = [];
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       calledUrls.push(url);
       if (url === "https://rpc-pro.lightsail.network/") {
@@ -166,10 +155,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("falls back from rpc to datalake in auto mode", async () => {
     let rpcGetEventsCalls = 0;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url === "https://rpc-pro.lightsail.network/") {
         const payload = init?.body ? JSON.parse(String(init.body)) : {};
@@ -217,10 +203,7 @@ describe("leaderboard ingestion source selection", () => {
   it("falls back in strict order: rpc-pro -> archive-rpc-pro -> datalake", async () => {
     const calledUrls: string[] = [];
     let rpcGetEventsCalls = 0;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       calledUrls.push(url);
       if (
@@ -270,9 +253,7 @@ describe("leaderboard ingestion source selection", () => {
     expect(result.nextCursor).toBe("ledger:3");
 
     const rpcProIndex = calledUrls.indexOf("https://rpc-pro.lightsail.network/");
-    const archiveIndex = calledUrls.indexOf(
-      "https://archive-rpc-pro.lightsail.network/",
-    );
+    const archiveIndex = calledUrls.indexOf("https://archive-rpc-pro.lightsail.network/");
     const datalakeConfigIndex = calledUrls.findIndex((url) =>
       url.includes("galexie-pro.lightsail.network/v1/.config.json"),
     );
@@ -285,10 +266,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("does not attempt events_api fallback in auto mode unless explicitly enabled", async () => {
     let eventsApiCalls = 0;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (
         url === "https://rpc-pro.lightsail.network/" ||
@@ -333,10 +311,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("attempts events_api fallback in auto mode when explicitly enabled", async () => {
     let eventsApiCalls = 0;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (
         url === "https://rpc-pro.lightsail.network/" ||
@@ -411,10 +386,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("prefers testnet Lightsail RPC and falls back to soroban-testnet when unresolved", async () => {
     const calledUrls: string[] = [];
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       calledUrls.push(url);
       if (url === "https://rpc-testnet.lightsail.network/") {
@@ -458,10 +430,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("does not forward datalake ledger cursors as rpc pagination cursor", async () => {
     let requestBody: Record<string, unknown> | null = null;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url === "https://rpc-pro.lightsail.network/") {
         requestBody = init?.body
@@ -490,10 +459,7 @@ describe("leaderboard ingestion source selection", () => {
 
   it("injects startLedger for soroban-testnet rpc when no cursor is available", async () => {
     const requestPayloads: Record<string, unknown>[] = [];
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url === "https://soroban-testnet.stellar.org/") {
         const payload = init?.body
@@ -529,9 +495,7 @@ describe("leaderboard ingestion source selection", () => {
 
     expect(result.provider).toBe("rpc");
     expect(result.nextCursor).toBe("rpc-cursor-testnet-2");
-    const getEventsPayload = requestPayloads.find(
-      (payload) => payload.method === "getEvents",
-    );
+    const getEventsPayload = requestPayloads.find((payload) => payload.method === "getEvents");
     expect(getEventsPayload).toBeDefined();
     const params = getEventsPayload?.params as Record<string, unknown>;
     expect(params.startLedger).toBe(995905);
@@ -540,10 +504,7 @@ describe("leaderboard ingestion source selection", () => {
   it("keeps auto mode rpc-only on testnet when galexie base is not testnet-compatible", async () => {
     let rpcCalls = 0;
     const calledUrls: string[] = [];
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       calledUrls.push(url);
       if (url === "https://soroban-testnet.stellar.org/") {
@@ -585,17 +546,12 @@ describe("leaderboard ingestion source selection", () => {
     expect(result.sourceMode).toBe("rpc");
     expect(result.nextCursor).toBe("rpc-cursor-testnet-only");
     expect(rpcCalls).toBe(1);
-    expect(
-      calledUrls.some((url) => url.includes("galexie-pro.lightsail.network")),
-    ).toBe(false);
+    expect(calledUrls.some((url) => url.includes("galexie-pro.lightsail.network"))).toBe(false);
   });
 
   it("omits start/end ledger when rpc pagination cursor is provided", async () => {
     let requestBody: Record<string, unknown> | null = null;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url === "https://rpc-pro.lightsail.network/") {
         requestBody = init?.body

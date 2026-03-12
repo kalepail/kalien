@@ -15,8 +15,7 @@ import {
 
 describe("buildRequestId", () => {
   it("combines address and nonce via (address << 32) | nonce", () => {
-    const address =
-      "0x0000000000000000000000000000000000000001" as `0x${string}`;
+    const address = "0x0000000000000000000000000000000000000001" as `0x${string}`;
     const nonce = 1;
     const id = buildRequestId(address, nonce);
     // 1n << 32n | 1n = 0x100000001n
@@ -24,14 +23,12 @@ describe("buildRequestId", () => {
   });
 
   it("returns 0 for zero address and zero nonce", () => {
-    const address =
-      "0x0000000000000000000000000000000000000000" as `0x${string}`;
+    const address = "0x0000000000000000000000000000000000000000" as `0x${string}`;
     expect(buildRequestId(address, 0)).toBe(0n);
   });
 
   it("truncates nonce to 32 bits via >>> 0", () => {
-    const address =
-      "0x0000000000000000000000000000000000000001" as `0x${string}`;
+    const address = "0x0000000000000000000000000000000000000001" as `0x${string}`;
     // 0x100000001 should truncate to nonce = 1 (lower 32 bits)
     const nonce = 0x100000001; // > 2^32, truncates to 1 via >>> 0
     const id = buildRequestId(address, nonce);
@@ -40,8 +37,7 @@ describe("buildRequestId", () => {
   });
 
   it("handles a realistic timestamp nonce", () => {
-    const address =
-      "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`;
+    const address = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`;
     const nonce = 1740000000; // realistic ~2025 unix timestamp fits in uint32
     const id = buildRequestId(address, nonce);
     expect(id > 0n).toBe(true);
@@ -54,8 +50,7 @@ describe("buildRequestId", () => {
 
 describe("decodeRequestId", () => {
   it("round-trips with buildRequestId (simple values)", () => {
-    const address =
-      "0x0000000000000000000000000000000000000042" as `0x${string}`;
+    const address = "0x0000000000000000000000000000000000000042" as `0x${string}`;
     const nonce = 9999;
     const id = buildRequestId(address, nonce);
     const decoded = decodeRequestId(id);
@@ -64,8 +59,7 @@ describe("decodeRequestId", () => {
   });
 
   it("round-trips with buildRequestId (realistic address and nonce)", () => {
-    const address =
-      "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`;
+    const address = "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`;
     const nonce = Date.now() >>> 0; // truncate to uint32
     const id = buildRequestId(address, nonce);
     const decoded = decodeRequestId(id);
@@ -74,10 +68,7 @@ describe("decodeRequestId", () => {
   });
 
   it("returns address with 0x prefix and 40 hex chars", () => {
-    const id = buildRequestId(
-      "0x1111111111111111111111111111111111111111" as `0x${string}`,
-      42,
-    );
+    const id = buildRequestId("0x1111111111111111111111111111111111111111" as `0x${string}`, 42);
     const { address } = decodeRequestId(id);
     expect(address).toMatch(/^0x[0-9a-f]{40}$/);
   });
@@ -99,10 +90,7 @@ describe("requestIdToHex", () => {
   });
 
   it("works with a realistic request id", () => {
-    const id = buildRequestId(
-      "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`,
-      12345,
-    );
+    const id = buildRequestId("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`, 12345);
     const hex = requestIdToHex(id);
     expect(hex).toMatch(/^0x[0-9a-f]+$/);
     // Should round-trip via BigInt
@@ -120,10 +108,7 @@ describe("parseBoundlessStatusUrl", () => {
   });
 
   it("parses a valid 'boundless:0x...' status URL", () => {
-    const id = buildRequestId(
-      "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`,
-      42,
-    );
+    const id = buildRequestId("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`, 42);
     const hex = requestIdToHex(id);
     const statusUrl = `boundless:${hex}`;
     const parsed = parseBoundlessStatusUrl(statusUrl);
@@ -153,10 +138,7 @@ describe("boundlessExplorerUrl", () => {
   });
 
   it("produces a valid URL for a realistic request ID", () => {
-    const id = buildRequestId(
-      "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`,
-      99999,
-    );
+    const id = buildRequestId("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as `0x${string}`, 99999);
     const url = boundlessExplorerUrl(id);
     expect(url).toMatch(/^https:\/\/explorer\.beboundless\.xyz\/orders\/\d+$/);
     // The decimal in the URL should recover the original bigint
@@ -165,9 +147,7 @@ describe("boundlessExplorerUrl", () => {
   });
 
   it("BOUNDLESS_EXPLORER_BASE_URL is the expected domain", () => {
-    expect(BOUNDLESS_EXPLORER_BASE_URL).toBe(
-      "https://explorer.beboundless.xyz",
-    );
+    expect(BOUNDLESS_EXPLORER_BASE_URL).toBe("https://explorer.beboundless.xyz");
   });
 });
 

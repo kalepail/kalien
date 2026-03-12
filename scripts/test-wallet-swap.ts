@@ -163,9 +163,24 @@ async function main() {
 
     // Check env vars via page eval
     const envCheck = await page.evaluate(() => ({
-      kaleSac: (import.meta as any).env?.VITE_KALE_SAC ?? "not set",
-      networkPassphrase: (import.meta as any).env?.VITE_NETWORK_PASSPHRASE ?? "not set",
-      tokenContractId: (import.meta as any).env?.VITE_TOKEN_CONTRACT_ID ?? "not set",
+      kaleSac:
+        (
+          import.meta as ImportMeta & {
+            env?: Record<string, string | undefined>;
+          }
+        ).env?.VITE_KALE_SAC ?? "not set",
+      networkPassphrase:
+        (
+          import.meta as ImportMeta & {
+            env?: Record<string, string | undefined>;
+          }
+        ).env?.VITE_NETWORK_PASSPHRASE ?? "not set",
+      tokenContractId:
+        (
+          import.meta as ImportMeta & {
+            env?: Record<string, string | undefined>;
+          }
+        ).env?.VITE_TOKEN_CONTRACT_ID ?? "not set",
     }));
     console.log(`  VITE_KALE_SAC: ${envCheck.kaleSac}`);
     console.log(`  VITE_NETWORK_PASSPHRASE: ${envCheck.networkPassphrase}`);
@@ -189,6 +204,7 @@ async function main() {
 
     // Now poll until the loading indicator disappears and a result appears
     let quoteResult = "timeout";
+    /* eslint-disable no-await-in-loop -- quote polling must remain sequential */
     for (let i = 0; i < 60; i++) {
       const state = await page.evaluate(() => {
         const body = document.body.textContent || "";
@@ -196,7 +212,12 @@ async function main() {
           hasLoading: body.includes("Getting quote"),
           hasQuote: body.includes("You receive"),
           hasError: body.includes("Failed to get quote") || body.includes("simulation failed"),
-          swap: body.substring(body.indexOf("SWAP KALIEN") || 0, (body.indexOf("TRANSFER KALIEN") || body.length)).trim(),
+          swap: body
+            .substring(
+              body.indexOf("SWAP KALIEN") || 0,
+              body.indexOf("TRANSFER KALIEN") || body.length,
+            )
+            .trim(),
         };
       });
 
@@ -220,11 +241,12 @@ async function main() {
       }
       await sleep(1000);
     }
+    /* eslint-enable no-await-in-loop */
 
     const elapsed = ((Date.now() - quoteStart) / 1000).toFixed(1);
 
     if (quoteResult === "success") {
-      const quoteText = await page.textContent("body") ?? "";
+      const quoteText = (await page.textContent("body")) ?? "";
       const match = quoteText.match(/~([\d,.]+)\s*KALE/);
       console.log(`  ✓ Quote received in ${elapsed}s: ~${match?.[1] ?? "?"} KALE`);
       const minMatch = quoteText.match(/Minimum.*?([\d,.]+)\s*KALE/);
@@ -232,7 +254,9 @@ async function main() {
     } else if (quoteResult === "error") {
       const errText = await page.evaluate(() => {
         const els = document.querySelectorAll('[class*="error"], [class*="Error"], [role="alert"]');
-        return Array.from(els).map(e => e.textContent).join(" | ");
+        return Array.from(els)
+          .map((e) => e.textContent)
+          .join(" | ");
       });
       console.log(`  ✗ Quote failed in ${elapsed}s: ${errText || "unknown"}`);
     } else {
