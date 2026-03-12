@@ -177,7 +177,7 @@ describe("resolveUsdOfferToWei", () => {
       minPriceWei: 0n,
       maxPriceWei: 0n,
     });
-    expect(mockReadContract).not.toHaveBeenCalled();
+    expect(getMockReadContract()).not.toHaveBeenCalled();
   });
 
   it("only converts non-zero offer legs", async () => {
