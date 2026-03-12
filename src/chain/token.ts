@@ -1,6 +1,6 @@
 import { Address, Asset, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { Client as ScoreClient } from "asteroids-score";
-import { getSmartAccountConfig, getSmartAccountKit } from "../wallet/smartAccount";
+import { DEFAULT_RPC_URL, TESTNET_NETWORK_PASSPHRASE } from "../consts";
 
 export interface TokenBalanceInput {
   walletAddress: string;
@@ -21,12 +21,28 @@ function nonEmptyEnv(value: string | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function getEnvValue(key: keyof ImportMetaEnv): string | undefined {
+  const value = import.meta.env[key];
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+
+  return undefined;
+}
+
 export function getScoreContractIdFromEnv(): string | null {
   return nonEmptyEnv(import.meta.env.VITE_SCORE_CONTRACT_ID);
 }
 
 export function getTokenContractIdFromEnv(): string | null {
   return nonEmptyEnv(import.meta.env.VITE_TOKEN_CONTRACT_ID);
+}
+
+function resolveRpcConfig(): { rpcUrl: string; networkPassphrase: string } {
+  return {
+    rpcUrl: getEnvValue("VITE_RPC_URL") ?? DEFAULT_RPC_URL,
+    networkPassphrase: getEnvValue("VITE_NETWORK_PASSPHRASE") ?? TESTNET_NETWORK_PASSPHRASE,
+  };
 }
 
 export function parseSacAssetFromName(name: string): Asset {
@@ -104,14 +120,12 @@ async function resolveSacAssetFromContractId(
 }
 
 async function resolveTokenContractId(scoreContractId: string): Promise<string> {
-  const config = getSmartAccountConfig();
-  const kit = getSmartAccountKit();
+  const config = resolveRpcConfig();
 
   const scoreClient = new ScoreClient({
     contractId: scoreContractId,
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.networkPassphrase,
-    publicKey: kit.deployerPublicKey,
   });
 
   const tx = await scoreClient.token_id();
@@ -128,7 +142,7 @@ export async function readTokenBalance(input: TokenBalanceInput): Promise<TokenB
     );
   }
 
-  const config = getSmartAccountConfig();
+  const config = resolveRpcConfig();
   const server = new rpc.Server(config.rpcUrl);
   const holderAddress = Address.fromString(input.walletAddress).toString();
   const asset = await resolveSacAssetFromContractId(server, tokenContractId);

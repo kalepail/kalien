@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  getScoreContractIdFromEnv,
-  getTokenContractIdFromEnv,
-  readTokenBalance,
-} from "../chain/token";
 import { formatWholeNumber, toDisplayKalien } from "../lib/format";
 
 export interface UseTokenBalanceReturn {
@@ -13,6 +8,35 @@ export interface UseTokenBalanceReturn {
   isRefreshing: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+}
+
+type TokenModule = typeof import("../chain/token");
+
+let tokenModulePromise: Promise<TokenModule> | null = null;
+
+function nonEmptyEnv(value: string | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getScoreContractIdFromEnv(): string | null {
+  return nonEmptyEnv(import.meta.env.VITE_SCORE_CONTRACT_ID);
+}
+
+function getTokenContractIdFromEnv(): string | null {
+  return nonEmptyEnv(import.meta.env.VITE_TOKEN_CONTRACT_ID);
+}
+
+function loadTokenModule(): Promise<TokenModule> {
+  if (!tokenModulePromise) {
+    tokenModulePromise = import("../chain/token");
+  }
+
+  return tokenModulePromise;
 }
 
 export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
@@ -47,7 +71,8 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
 
     setIsRefreshing(true);
     try {
-      const next = await readTokenBalance({
+      const tokenModule = await loadTokenModule();
+      const next = await tokenModule.readTokenBalance({
         walletAddress,
         scoreContractId,
         tokenContractId: tokenContractOverride,
