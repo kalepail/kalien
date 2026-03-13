@@ -732,7 +732,7 @@ export class AsteroidsGame {
     this.inputSource?.advance();
 
     if (
-      (this.mode === "playing" || this.mode === "replay") &&
+      (this.mode === "playing" || (this.mode === "replay" && this.lives > 0)) &&
       this.asteroids.length === 0 &&
       this.saucers.length === 0
     ) {
@@ -1699,13 +1699,14 @@ export class AsteroidsGame {
 
   /** Snapshot the current recorded run (no claimant binding). */
   getRunRecord(): GameRunRecord | null {
-    // For completed replay: return a record built from the tape's stored data
+    // For completed replay: keep the tape inputs, but report the score produced by
+    // the local engine so replay UI stays aligned with verifier semantics.
     if (!this.recorder && this.replayTape) {
       return {
         seed: this.replayTape.header.seed,
         seedId: this.gameSeedId,
         inputs: this.replayTape.inputs,
-        finalScore: this.replayTape.footer.finalScore,
+        finalScore: this.score,
       };
     }
 
