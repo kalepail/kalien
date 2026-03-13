@@ -1699,7 +1699,7 @@ export class AsteroidsGame {
 
   /** Snapshot the current recorded run (no claimant binding). */
   getRunRecord(): GameRunRecord | null {
-    // For completed replay: keep the tape inputs, but report the score produced by
+    // For replay sessions: keep the tape inputs, but report the score produced by
     // the local engine so replay UI stays aligned with verifier semantics.
     if (!this.recorder && this.replayTape) {
       return {
