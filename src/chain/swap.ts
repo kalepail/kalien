@@ -13,11 +13,7 @@ import {
   rpc,
   scValToNative,
 } from "@stellar/stellar-sdk";
-import {
-  getSmartAccountConfig,
-  getSmartAccountKit,
-  signTransactionWithDeployer,
-} from "../wallet/smartAccount";
+import { getSmartAccountConfig, getSmartAccountKit } from "../wallet/smartAccount";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -60,6 +56,11 @@ interface SwapRelayResponse {
   data?: { hash?: string };
 }
 
+interface SwapRelayPayload {
+  func: string;
+  auth: string[];
+}
+
 export function requireSwapSubmissionHash(result: SwapRelayResponse): string {
   if (!result.success) {
     throw new Error(result.error ?? "swap submission failed");
@@ -73,51 +74,21 @@ export function requireSwapSubmissionHash(result: SwapRelayResponse): string {
   return hash;
 }
 
-export function buildSignedSwapSubmissionXdr(
+export function buildSwapRelayPayload(
   assembledXdr: string,
   signedAuth: xdr.SorobanAuthorizationEntry[],
-  networkPassphrase: string,
-  signWithDeployer: (tx: ReturnType<typeof TransactionBuilder.fromXDR>) => void,
-): string {
+): SwapRelayPayload {
   const envelope = xdr.TransactionEnvelope.fromXDR(assembledXdr, "base64");
   const v1 = envelope.v1();
   if (!v1) {
     throw new Error("swap submission requires a v1 transaction envelope");
   }
-  const txBody = v1.tx();
-  const firstOp = txBody.operations()[0];
+  const firstOp = v1.tx().operations()[0];
   const invokeOp = firstOp.body().invokeHostFunctionOp();
-
-  const newInvokeOp = new xdr.InvokeHostFunctionOp({
-    hostFunction: invokeOp.hostFunction(),
-    auth: signedAuth,
-  });
-
-  const newOp = new xdr.Operation({
-    sourceAccount: firstOp.sourceAccount(),
-    body: xdr.OperationBody.invokeHostFunction(newInvokeOp),
-  });
-
-  const newTxBody = new xdr.Transaction({
-    sourceAccount: txBody.sourceAccount(),
-    fee: txBody.fee(),
-    seqNum: txBody.seqNum(),
-    cond: txBody.cond(),
-    memo: txBody.memo(),
-    operations: [newOp],
-    ext: txBody.ext(),
-  });
-
-  const rebuiltEnvelope = xdr.TransactionEnvelope.envelopeTypeTx(
-    new xdr.TransactionV1Envelope({
-      tx: newTxBody,
-      signatures: [],
-    }),
-  );
-
-  const rebuiltTx = TransactionBuilder.fromXDR(rebuiltEnvelope.toXDR("base64"), networkPassphrase);
-  signWithDeployer(rebuiltTx);
-  return rebuiltTx.toXDR();
+  return {
+    func: invokeOp.hostFunction().toXDR("base64"),
+    auth: signedAuth.map((entry) => entry.toXDR("base64")),
+  };
 }
 
 // ── Quote ────────────────────────────────────────────────────────────────
@@ -174,7 +145,7 @@ export async function getSwapQuote(
 /**
  * Execute KALIEN -> KALE swap via Soroswap Router.
  *
- * Flow: build tx → simulate → sign auth entries (passkey) → rebuild XDR → submit via relay.
+ * Flow: build tx → simulate → sign auth entries (passkey) → submit func/auth via relay.
  */
 export async function executeSwap(
   swapCfg: SwapConfig,
@@ -194,9 +165,9 @@ export async function executeSwap(
   const pathScVal = xdr.ScVal.scvVec(path.map((a) => new Address(a).toScVal()));
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-  // Build swap transaction (deployer is source / fee payer; smart wallet authorises via auth entries)
+  // Build a simulation envelope to obtain auth entries for the swap call.
   const tx = new TransactionBuilder(deployerAccount, {
-    fee: "10000000",
+    fee: "100",
     networkPassphrase: config.networkPassphrase,
   })
     .addOperation(
@@ -233,22 +204,13 @@ export async function executeSwap(
     Array.from(unsignedAuth, (entry) => kit.signAuthEntry(entry, { credentialId })),
   );
 
-  // Rebuild with the signed auth entries, then sign the finished transaction
-  // in place so the relayer receives a fully signed XDR.
-  const signedXdr = buildSignedSwapSubmissionXdr(
-    assembled.toXDR(),
-    signedAuth,
-    config.networkPassphrase,
-    (rebuiltTx) => {
-      signTransactionWithDeployer(rebuiltTx, kit);
-    },
-  );
-
-  // Submit via relay proxy (Channels relayer fee-bumps and submits)
+  // Submit func + signed auth so Channels can build the final Soroban
+  // envelope with a channel account and the expected fee shape.
+  const relayPayload = buildSwapRelayPayload(assembled.toXDR(), signedAuth);
   const response = await fetch("/api/relay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ xdr: signedXdr }),
+    body: JSON.stringify(relayPayload),
   });
 
   if (!response.ok) {
