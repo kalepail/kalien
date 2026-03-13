@@ -3,6 +3,7 @@ import {
   Account,
   Contract,
   Networks,
+  Operation,
   TransactionBuilder,
   xdr,
 } from "@stellar/stellar-sdk";
@@ -26,6 +27,22 @@ describe("buildSwapRelayPayload", () => {
 
     const func = xdr.HostFunction.fromXDR(relayPayload.func, "base64");
     expect(func.switch().name).toBe("hostFunctionTypeInvokeContract");
+  });
+
+  it("fails clearly when the transaction does not contain the expected swap op", () => {
+    const sourceAccount = new Account("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "1");
+
+    const assembled = new TransactionBuilder(sourceAccount, {
+      fee: "1000000",
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(Operation.restoreFootprint({}))
+      .setTimeout(300)
+      .build();
+
+    expect(() => buildSwapRelayPayload(assembled.toXDR(), [])).toThrow(
+      "swap submission requires an invokeHostFunction operation",
+    );
   });
 
   it("rejects relay responses that omit the transaction hash", () => {

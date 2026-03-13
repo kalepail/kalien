@@ -83,7 +83,16 @@ export function buildSwapRelayPayload(
   if (!v1) {
     throw new Error("swap submission requires a v1 transaction envelope");
   }
-  const firstOp = v1.tx().operations()[0];
+  const operations = v1.tx().operations();
+  if (operations.length !== 1) {
+    throw new Error("swap submission requires exactly one operation");
+  }
+
+  const firstOp = operations[0];
+  if (firstOp.body().switch().name !== "invokeHostFunction") {
+    throw new Error("swap submission requires an invokeHostFunction operation");
+  }
+
   const invokeOp = firstOp.body().invokeHostFunctionOp();
   return {
     func: invokeOp.hostFunction().toXDR("base64"),
@@ -207,7 +216,7 @@ export async function executeSwap(
   // Submit func + signed auth so Channels can build the final Soroban
   // envelope with a channel account and the expected fee shape.
   const relayPayload = buildSwapRelayPayload(assembled.toXDR(), signedAuth);
-  const response = await fetch("/api/relay", {
+  const response = await fetch(config.relayerUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(relayPayload),
