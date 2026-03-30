@@ -434,6 +434,7 @@ export class AsteroidsGame {
   }
 
   private updateFrame(timestampMs: number): void {
+    this.input.pollGamepad();
     this.handleGlobalInput();
 
     if (this.mode === "playing") {
@@ -523,6 +524,10 @@ export class AsteroidsGame {
       if ((this.mode === "menu" || this.mode === "game-over") && this.canStartLiveRun()) {
         this.audio.enable();
         this.startNewGame();
+      } else if (this.mode === "playing") {
+        this.mode = "paused";
+        this.pauseFromHidden = false;
+        this.audio.pauseMusic();
       } else if (this.mode === "paused") {
         this.mode = "playing";
         this.pauseFromHidden = false;
