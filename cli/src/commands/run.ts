@@ -193,6 +193,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         opts.relayerApiKey,
       );
       if (bumped.success && bumped.seedId !== null && bumped.seed !== null) {
+        lastSeedAuthorityAt = performance.now();
         return { seedId: bumped.seedId, seed: bumped.seed };
       }
       return context;
@@ -217,7 +218,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         return hasFreshSeedAuthority() ? { seedId: currentEpoch, seed: currentSeed } : null;
       }
       lastSeedAuthorityAt = performance.now();
-      return await materializeSeed(context);
+      const resolvedContext = await materializeSeed(context);
+      return hasFreshSeedAuthority() ? resolvedContext : null;
     } finally {
       seedRefreshInFlight = false;
     }
