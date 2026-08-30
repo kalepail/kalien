@@ -41,6 +41,10 @@ export interface RunOptions {
   relayerApiKey: string | null;
 }
 
+/**
+ * Read claimant best score for a specific seed_id against the selected
+ * network passphrase. Returns 0 for transient RPC/simulation failures.
+ */
 async function fetchBestScoreForSeedOnNetwork(
   contractId: string,
   rpcUrl: string,
@@ -49,8 +53,15 @@ async function fetchBestScoreForSeedOnNetwork(
   seedId: number,
 ): Promise<number> {
   try {
-    const client = new ScoreClient({ contractId, rpcUrl, networkPassphrase });
-    const tx = await client.best_score({ claimant, seed_id: seedId >>> 0 });
+    const client = new ScoreClient({
+      contractId,
+      rpcUrl,
+      networkPassphrase,
+    });
+    const tx = await client.best_score({
+      claimant,
+      seed_id: seedId >>> 0,
+    });
     return tx.result;
   } catch {
     return 0;
@@ -60,8 +71,8 @@ async function fetchBestScoreForSeedOnNetwork(
 export async function runCommand(opts: RunOptions): Promise<void> {
   const availableCores = cpus().length;
   const threadCount = opts.threads > 0 ? opts.threads : Math.max(1, Math.floor(availableCores / 2));
-  const pct = Math.round((threadCount / availableCores) * 100);
 
+  const pct = Math.round((threadCount / availableCores) * 100);
   process.stdout.write(
     ansi.color(ansi.cyan, "  Cores: ") +
       ansi.color(ansi.white, `${threadCount}/${availableCores}`) +
@@ -83,15 +94,18 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     process.stdout.write(ansi.color(ansi.yellow, `  Warning: ${warning}\n`));
   }
 
+  // Fetch on-chain high score before starting workers
   process.stdout.write(ansi.color(ansi.cyan, "  Fetching on-chain score..."));
   const playerInfo = await fetchPlayerScore(opts.address, opts.apiUrl);
   let onChainBestScore = playerInfo.bestScore;
-  process.stdout.write(
-    onChainBestScore > 0
-      ? ansi.color(ansi.green, ` ${onChainBestScore}\n`)
-      : ansi.color(ansi.dim, " none\n"),
-  );
+  if (onChainBestScore > 0) {
+    process.stdout.write(ansi.color(ansi.green, ` ${onChainBestScore}\n`));
+  } else {
+    process.stdout.write(ansi.color(ansi.dim, " none\n"));
+  }
 
+  // Resolve the current seed_id from contract simulation, whose ledger timestamp
+  // matches chain authority. The local wall clock is never used for submission ids.
   process.stdout.write(ansi.color(ansi.cyan, "  Resolving chain seed_id..."));
   const initialSeedContext = await fetchSeedContextFromContract(
     opts.contractId,
@@ -114,6 +128,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     );
   }
 
+  // Fetch on-chain best for the chain-authoritative current seed_id so we don't
+  // submit worse scores from a previous session or a different client.
   process.stdout.write(ansi.color(ansi.cyan, "  Fetching seed best score..."));
   const initialSeedBest = await fetchBestScoreForSeedOnNetwork(
     opts.contractId,
@@ -122,12 +138,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     opts.address,
     initialSeedId,
   );
-  process.stdout.write(
-    initialSeedBest > 0
-      ? ansi.color(ansi.green, ` ${initialSeedBest}\n`)
-      : ansi.color(ansi.dim, " none\n"),
-  );
+  if (initialSeedBest > 0) {
+    process.stdout.write(ansi.color(ansi.green, ` ${initialSeedBest}\n`));
+  } else {
+    process.stdout.write(ansi.color(ansi.dim, " none\n"));
+  }
 
+  // Epoch tracking: currentEpoch is always a chain-resolved seed_id.
   let currentEpoch = initialSeedId;
   let epochGamesPlayed = 0;
   let currentSeed: number | null = initialSeedContext.seed;
@@ -208,27 +225,46 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     }
   }
 
+  // Score tracking (per epoch)
   let bestScore = 0;
   let bestTape: Uint8Array | null = null;
   let bestConfig: AutopilotConfig = Autopilot.defaults();
-  let lastSubmittedScore = initialSeedBest;
+  let lastSubmittedScore = initialSeedBest; // start from on-chain best so we don't submit worse
+
+  // Settle tracking: when a new best is found, record the timestamp.
+  // Don't submit until SETTLE_DELAY_MS has elapsed (score may still be climbing).
   let bestScoreFoundAt = 0;
+
+  // Submission budget tracking (per epoch)
   let epochSubmissions = 0;
+
+  // Session stats
   let totalGamesPlayed = 0;
   let totalSubmissions = 0;
   let lastSubmitStatus = "";
   const startTime = Date.now();
   let submitting = false;
+
+  // Per-worker best scores for dashboard display
   const workerBests: number[] = Array.from({ length: threadCount }, () => 0);
 
+  // Spawn workers: worker 0 is the exploiter, the rest are explorers.
+  // Exploiter: small mutations, always tracks the global best.
+  // Explorers: large mutations, independent search, restart from random when stuck.
+  // In compiled binaries ($bunfs), import.meta.url-based URLs don't resolve;
+  // use a plain string literal instead (worker must be a --compile entrypoint).
+  // For `bun run` (dev), use import.meta.url so the path resolves from the source file.
   const isCompiled = import.meta.url.includes("$bunfs");
   const workers: Worker[] = [];
   const workerAlive: boolean[] = Array.from({ length: threadCount }, () => false);
 
   function safePostToWorker(index: number, msg: MainToWorkerMessage): void {
     const worker = workers[index];
-    if (!worker || !workerAlive[index]) return;
+    if (!worker || !workerAlive[index]) {
+      return;
+    }
     try {
+      // eslint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage does not accept targetOrigin
       worker.postMessage(msg);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -275,12 +311,16 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           epochGamesPlayed++;
           break;
         case "new-best":
+          // Accept work only while the main thread still has fresh chain authority.
           if (!hasFreshSeedAuthority() || msg.seedId !== currentEpoch) break;
           if (msg.score > bestScore) {
             bestScore = msg.score;
             bestTape = msg.tape;
             bestConfig = msg.config;
             bestScoreFoundAt = Date.now();
+
+            // Immediately share the new global best with the exploiter (worker 0)
+            // so it can start refining this region right away.
             if (msg.workerId !== 0) {
               safePostToWorker(0, {
                 type: "set-config",
@@ -288,6 +328,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
                 globalScore: msg.score,
               });
             }
+
+            // Also offer to all other explorers — they'll decide whether to adopt
+            // based on their own threshold logic (>10% improvement required).
             for (let j = 1; j < workers.length; j++) {
               if (j !== msg.workerId) {
                 safePostToWorker(j, {
@@ -326,19 +369,23 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   function resetEpoch(onChainSeedBest = 0): void {
     const prevBestScore = bestScore;
     const prevBestConfig = bestConfig;
+
     bestScore = 0;
     bestTape = null;
-    lastSubmittedScore = onChainSeedBest;
+    lastSubmittedScore = onChainSeedBest; // start from on-chain best so we don't submit worse
     epochGamesPlayed = 0;
     epochSubmissions = 0;
     bestScoreFoundAt = 0;
     workerBests.fill(0);
+
+    // Carry best config forward only if it improved over defaults
     const seedConfig = prevBestScore > 0 ? prevBestConfig : Autopilot.defaults();
     bestConfig = seedConfig;
 
     for (let i = 0; i < workers.length; i++) {
       safePostToWorker(i, { type: "reset-best" });
       if (i === 0) {
+        // Exploiter gets the carried-forward best config
         safePostToWorker(i, {
           type: "set-config",
           config: seedConfig,
@@ -346,15 +393,19 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           force: true,
         });
       }
+      // Explorers handle their own reset in reset-best (they pick a random config)
     }
   }
 
+  // Submit if we have an unsubmitted improvement
   async function doSubmit(force = false): Promise<void> {
     if (submitting || !bestTape || bestScore <= lastSubmittedScore) return;
     if (!hasFreshSeedAuthority()) {
       pauseForStaleSeedAuthority();
       return;
     }
+
+    // Check submission budget
     if (epochSubmissions >= MAX_SUBMISSIONS_PER_EPOCH && !force) {
       lastSubmitStatus = ansi.color(
         ansi.yellow,
@@ -362,12 +413,18 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       );
       return;
     }
-    if (!force && bestScoreFoundAt > 0 && Date.now() - bestScoreFoundAt < SETTLE_DELAY_MS) return;
+
+    // Settle delay: wait for score to stop climbing before submitting
+    if (!force && bestScoreFoundAt > 0 && Date.now() - bestScoreFoundAt < SETTLE_DELAY_MS) {
+      return;
+    }
 
     submitting = true;
     const tape = bestTape;
     const score = bestScore;
+
     lastSubmitStatus = ansi.color(ansi.yellow, `submitting (score: ${score})...`);
+
     const result: SubmitResult = await submitTape(tape, opts.address, currentEpoch, opts.apiUrl);
 
     if (result.success) {
@@ -379,17 +436,22 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         `score ${score} submitted (${result.jobId || "ok"})`,
       );
     } else if (result.rateLimited) {
-      lastSubmitStatus = ansi.color(ansi.yellow, "rate limited - will retry");
+      lastSubmitStatus = ansi.color(ansi.yellow, `rate limited - will retry`);
     } else {
       lastSubmitStatus = ansi.color(ansi.red, `failed: ${result.error}`);
     }
+
     submitting = false;
   }
 
+  // Main tick: chain seed_id changes drive epoch transitions and submissions.
   const tickInterval = setInterval(async () => {
     const context = await refreshCurrentSeed();
+
     if (context === null) {
-      if (!hasFreshSeedAuthority()) pauseForStaleSeedAuthority();
+      if (!hasFreshSeedAuthority()) {
+        pauseForStaleSeedAuthority();
+      }
       return;
     }
 
@@ -397,11 +459,19 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     seedAuthorityPaused = false;
 
     if (context.seedId !== currentEpoch) {
+      // Drain loop: during doSubmit(), workers can still post new-best messages
+      // that update bestScore/bestTape. Keep submitting until no unsubmitted
+      // improvements remain so we never lose a late-arriving high score.
+      /* eslint-disable no-await-in-loop, no-unmodified-loop-condition -- drain logic must wait for in-flight submits before deciding whether to submit again */
       for (let drain = 0; drain < 10; drain++) {
-        while (submitting) await new Promise((resolve) => setTimeout(resolve, 100));
-        if (bestTape && bestScore > lastSubmittedScore) await doSubmit(true);
-        else break;
+        while (submitting) await new Promise((r) => setTimeout(r, 100));
+        if (bestTape && bestScore > lastSubmittedScore) {
+          await doSubmit(true);
+        } else {
+          break;
+        }
       }
+      /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
 
       const chainSeedId = context.seedId;
       currentEpoch = chainSeedId;
@@ -421,22 +491,29 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
       void fetchPlayerScore(opts.address, opts.apiUrl).then((info) => {
         onChainBestScore = info.bestScore;
+        return undefined;
       });
-      void fetchBestScoreForSeedOnNetwork(
+
+      fetchBestScoreForSeedOnNetwork(
         opts.contractId,
         opts.rpcUrl,
         opts.networkPassphrase,
         opts.address,
         chainSeedId,
       ).then((seedBest) => {
+        // Only apply if we're still in the same chain epoch and haven't already
+        // submitted something better this session.
         if (chainSeedId === currentEpoch && seedBest > lastSubmittedScore) {
           lastSubmittedScore = seedBest;
         }
+        return undefined;
       });
     } else if (authorityWasPaused || context.seed !== currentSeed) {
       currentSeed = context.seed;
       broadcastSeedContext(context);
-      if (authorityWasPaused) lastSubmitStatus = ansi.color(ansi.cyan, "chain seed authority refreshed");
+      if (authorityWasPaused) {
+        lastSubmitStatus = ansi.color(ansi.cyan, "chain seed authority refreshed");
+      }
       if (context.seed !== null && announceSeedResolution) {
         lastSubmitStatus = ansi.color(
           ansi.cyan,
@@ -446,13 +523,18 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       }
     }
 
+    // Try to submit if we have a settled improvement
     await doSubmit();
   }, 2000);
 
+  // Dashboard update
   process.stdout.write(ansi.clearScreen + ansi.cursorHide);
   const dashInterval = setInterval(() => {
     const now = Date.now();
+    // Display-only estimate. Submission authority always comes from currentEpoch.
     const epochRemainingSec = Math.max(0, (estimatedEpochEndMs(currentEpoch) - now) / 1000);
+
+    // Settle countdown (seconds remaining before we'll submit)
     let settleRemainingSec = 0;
     if (bestScoreFoundAt > 0 && bestScore > lastSubmittedScore) {
       const elapsed = now - bestScoreFoundAt;
@@ -483,16 +565,25 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     renderDashboard(stats);
   }, 500);
 
+  // Graceful shutdown
   async function shutdown(): Promise<void> {
     clearInterval(dashInterval);
     clearInterval(tickInterval);
+
     process.stdout.write(ansi.cursorShow);
     console.log("\n");
     console.log(ansi.color(ansi.brightCyan, "  Shutting down..."));
 
-    for (let i = 0; i < workers.length; i++) safePostToWorker(i, { type: "stop" });
-    while (submitting) await new Promise((resolve) => setTimeout(resolve, 100));
+    // Stop workers
+    for (let i = 0; i < workers.length; i++) {
+      safePostToWorker(i, { type: "stop" });
+    }
 
+    // Drain any in-flight submit before the final one
+    /* eslint-disable no-await-in-loop, no-unmodified-loop-condition -- shutdown must wait for the current submit to finish before the final flush */
+    while (submitting) await new Promise((r) => setTimeout(r, 100));
+    /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
+    // Final submit if we have an unsubmitted improvement and fresh chain authority.
     if (!hasFreshSeedAuthority()) {
       console.log(ansi.color(ansi.yellow, "  Final submit skipped: chain seed authority is stale."));
     } else if (bestTape && bestScore > lastSubmittedScore) {
@@ -508,6 +599,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       console.log(ansi.color(ansi.dim, "  No unsubmitted improvements."));
     }
 
+    // Summary
     const elapsed = (Date.now() - startTime) / 1000;
     console.log("");
     console.log(ansi.color(ansi.brightWhite, "  Session Summary"));
@@ -525,16 +617,21 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     );
     console.log("");
 
-    for (const worker of workers) worker.terminate();
+    // Terminate workers
+    for (const w of workers) {
+      w.terminate();
+    }
+
     process.exit(0);
   }
 
   process.on("SIGINT", () => {
-    void shutdown();
+    shutdown();
   });
   process.on("SIGTERM", () => {
-    void shutdown();
+    shutdown();
   });
 
+  // Keep alive
   await new Promise(() => {});
 }
