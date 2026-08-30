@@ -8,13 +8,11 @@ export type MainToWorkerMessage =
       type: "start";
       workerId: number;
       role: WorkerRole;
-      rpcUrl: string;
-      contractId: string;
-      networkPassphrase: string;
-      relayerBaseUrl: string;
-      relayerApiKey: string | null;
+      seedId: number;
+      seed: number | null;
     }
   | { type: "stop" }
+  | { type: "seed-context"; seedId: number; seed: number | null }
   | { type: "reset-best" }
   | {
       type: "set-config";
