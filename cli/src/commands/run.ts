@@ -12,18 +12,18 @@ import {
   MAX_SUBMISSIONS_PER_EPOCH,
   SETTLE_DELAY_MS,
 } from "../constants";
-import { fetchSeedFromContract } from "@/chain/seed";
+import { fetchSeedContextFromContract, type SeedContext } from "@/chain/seed";
 import { runCliPreflight } from "../preflight";
 
 const SEED_FETCH_TIMEOUT_MS = 6000;
 const SEED_REFRESH_INTERVAL_MS = 4000;
 
-function getCurrentEpoch(): number {
-  return Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
+function estimatedEpochEndMs(seedId: number): number {
+  return (seedId + 1) * SEED_INTERVAL_SECONDS * 1000;
 }
 
-function epochEndMs(epoch: number): number {
-  return (epoch + 1) * SEED_INTERVAL_SECONDS * 1000;
+function localSeedIdEstimate(): number {
+  return Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
 }
 
 export interface RunOptions {
@@ -102,9 +102,32 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     process.stdout.write(ansi.color(ansi.dim, " none\n"));
   }
 
-  // Fetch on-chain best for the *current seed_id* so we don't submit worse
-  // scores from a previous session or a different client (e.g. the web UI).
-  const initialSeedId = getCurrentEpoch();
+  // Resolve the current seed_id from contract simulation, whose ledger timestamp
+  // matches chain authority. The local wall clock is never used for submission ids.
+  process.stdout.write(ansi.color(ansi.cyan, "  Resolving chain seed_id..."));
+  const initialSeedContext = await fetchSeedContextFromContract(
+    opts.contractId,
+    opts.rpcUrl,
+    opts.networkPassphrase,
+  );
+  if (initialSeedContext === null) {
+    throw new Error("Unable to resolve the current seed_id from the Stellar network");
+  }
+  const initialSeedId = initialSeedContext.seedId;
+  process.stdout.write(ansi.color(ansi.green, ` ${initialSeedId}\n`));
+
+  const initialClockDelta = localSeedIdEstimate() - initialSeedId;
+  if (initialClockDelta !== 0) {
+    process.stdout.write(
+      ansi.color(
+        ansi.yellow,
+        `  Warning: local clock seed_id differs from chain by ${initialClockDelta}; chain authority will be used\n`,
+      ),
+    );
+  }
+
+  // Fetch on-chain best for the chain-authoritative current seed_id so we don't
+  // submit worse scores from a previous session or a different client.
   process.stdout.write(ansi.color(ansi.cyan, "  Fetching seed best score..."));
   const initialSeedBest = await fetchBestScoreForSeedOnNetwork(
     opts.contractId,
@@ -119,20 +142,18 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     process.stdout.write(ansi.color(ansi.dim, " none\n"));
   }
 
-  // Epoch tracking
+  // Epoch tracking: currentEpoch is always a chain-resolved seed_id.
   let currentEpoch = initialSeedId;
   let epochGamesPlayed = 0;
-  let currentSeed: number | null = null;
+  let currentSeed: number | null = initialSeedContext.seed;
   let seedRefreshInFlight = false;
   let lastSeedRefreshAt = 0;
-  let announceSeedResolution = false;
+  let announceSeedResolution = currentSeed === null;
 
-  // Read the currently materialized seed from temporary storage.
-  // If the active seed_id has not been materialized yet this returns null.
-  async function fetchCurrentSeed(): Promise<number | null> {
+  async function fetchCurrentSeedContext(): Promise<SeedContext | null> {
     try {
-      return await Promise.race<number | null>([
-        fetchSeedFromContract(opts.contractId, opts.rpcUrl),
+      return await Promise.race<SeedContext | null>([
+        fetchSeedContextFromContract(opts.contractId, opts.rpcUrl, opts.networkPassphrase),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), SEED_FETCH_TIMEOUT_MS)),
       ]);
     } catch {
@@ -140,41 +161,33 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     }
   }
 
-  async function refreshCurrentSeed(force = false): Promise<void> {
-    if (seedRefreshInFlight) return;
+  async function refreshCurrentSeed(force = false): Promise<SeedContext | null> {
+    if (seedRefreshInFlight) return null;
 
     const now = Date.now();
     if (!force && now - lastSeedRefreshAt < SEED_REFRESH_INTERVAL_MS) {
-      return;
+      return { seedId: currentEpoch, seed: currentSeed };
     }
 
-    const requestedEpoch = getCurrentEpoch();
     seedRefreshInFlight = true;
     lastSeedRefreshAt = now;
     try {
-      const seed = await fetchCurrentSeed();
-
-      // Ignore stale responses that started in a previous epoch.
-      if (requestedEpoch !== getCurrentEpoch()) {
-        return;
-      }
-
-      if (seed !== null) {
-        currentSeed = seed;
+      const context = await fetchCurrentSeedContext();
+      if (context?.seedId === currentEpoch && context.seed !== null) {
+        currentSeed = context.seed;
         if (announceSeedResolution) {
           lastSubmitStatus = ansi.color(
             ansi.cyan,
-            `new seed_id materialized (0x${seed.toString(16).padStart(8, "0").toUpperCase()})`,
+            `new seed_id materialized (0x${context.seed.toString(16).padStart(8, "0").toUpperCase()})`,
           );
           announceSeedResolution = false;
         }
       }
+      return context;
     } finally {
       seedRefreshInFlight = false;
     }
   }
-
-  void refreshCurrentSeed(true);
 
   // Score tracking (per epoch)
   let bestScore = 0;
@@ -241,7 +254,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           epochGamesPlayed++;
           break;
         case "new-best":
-          // Discard tapes from a stale epoch (worker hadn't received reset-best yet)
+          // Discard tapes from a stale chain seed_id.
           if (msg.seedId !== currentEpoch) break;
           if (msg.score > bestScore) {
             bestScore = msg.score;
@@ -293,6 +306,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       role,
       rpcUrl: opts.rpcUrl,
       contractId: opts.contractId,
+      networkPassphrase: opts.networkPassphrase,
       relayerBaseUrl: opts.relayerBaseUrl,
       relayerApiKey: opts.relayerApiKey,
     });
@@ -372,12 +386,11 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     submitting = false;
   }
 
-  // Main tick: check epoch transitions and submit improvements
+  // Main tick: chain seed_id changes drive epoch transitions and submissions.
   const tickInterval = setInterval(async () => {
-    const epoch = getCurrentEpoch();
+    const context = await refreshCurrentSeed();
 
-    // Epoch changed — new seed_id interval
-    if (epoch !== currentEpoch) {
+    if (context !== null && context.seedId !== currentEpoch) {
       // Drain loop: during doSubmit(), workers can still post new-best messages
       // that update bestScore/bestTape. Keep submitting until no unsubmitted
       // improvements remain so we never lose a late-arriving high score.
@@ -391,37 +404,45 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         }
       }
       /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
-      currentEpoch = epoch;
-      currentSeed = null; // will be updated once the fetch resolves
-      resetEpoch(); // reset immediately with 0, then backfill from on-chain
-      lastSubmitStatus = ansi.color(ansi.cyan, "new seed_id interval — fetching seed...");
-      announceSeedResolution = true;
-      // Refresh seed and on-chain score in the background
-      void refreshCurrentSeed(true);
+
+      const chainSeedId = context.seedId;
+      currentEpoch = chainSeedId;
+      currentSeed = context.seed;
+      resetEpoch();
+      lastSubmitStatus = ansi.color(ansi.cyan, "new chain seed_id — fetching seed...");
+      announceSeedResolution = currentSeed === null;
+
+      const localDelta = localSeedIdEstimate() - chainSeedId;
+      if (localDelta !== 0) {
+        lastSubmitStatus = ansi.color(
+          ansi.yellow,
+          `chain seed_id active; local clock differs by ${localDelta}`,
+        );
+      }
+
       void fetchPlayerScore(opts.address, opts.apiUrl).then((info) => {
         onChainBestScore = info.bestScore;
         return undefined;
       });
-      // Fetch this player's on-chain best for the new seed so we don't
-      // submit scores worse than what's already claimed.
+
       fetchBestScoreForSeedOnNetwork(
         opts.contractId,
         opts.rpcUrl,
         opts.networkPassphrase,
         opts.address,
-        epoch,
+        chainSeedId,
       ).then((seedBest) => {
-        // Only apply if we're still in the same epoch and haven't already
+        // Only apply if we're still in the same chain epoch and haven't already
         // submitted something better this session.
-        if (epoch === currentEpoch && seedBest > lastSubmittedScore) {
+        if (chainSeedId === currentEpoch && seedBest > lastSubmittedScore) {
           lastSubmittedScore = seedBest;
         }
         return undefined;
       });
     }
 
-    // Initial/current epoch seed may not be materialized immediately.
-    // Keep polling in the background until it appears so the dashboard can update.
+    // The active seed may not be materialized immediately. Keep polling chain
+    // authority until the exact SeedById(currentEpoch) entry appears.
     if (currentSeed === null) {
       void refreshCurrentSeed();
     }
@@ -434,7 +455,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   process.stdout.write(ansi.clearScreen + ansi.cursorHide);
   const dashInterval = setInterval(() => {
     const now = Date.now();
-    const epochRemainingSec = Math.max(0, (epochEndMs(currentEpoch) - now) / 1000);
+    // Display-only estimate. Submission authority always comes from currentEpoch.
+    const epochRemainingSec = Math.max(0, (estimatedEpochEndMs(currentEpoch) - now) / 1000);
 
     // Settle countdown (seconds remaining before we'll submit)
     let settleRemainingSec = 0;
