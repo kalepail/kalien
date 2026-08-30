@@ -3,14 +3,17 @@ import { AsteroidsGame } from "@/game/AsteroidsGame";
 import { Autopilot, type AutopilotConfig } from "@/game/Autopilot";
 import type { MainToWorkerMessage, WorkerRole, WorkerToMainMessage } from "./messages";
 import { mutateConfig, randomConfig, warmRestartConfig } from "./mutate";
-import { fetchSeedFromContract } from "@/chain/seed";
-import { MAX_FRAMES, EXPLORER_RESTART_THRESHOLD, SEED_INTERVAL_SECONDS } from "../constants";
+import { fetchSeedContextFromContract } from "@/chain/seed";
+import { MAX_FRAMES, EXPLORER_RESTART_THRESHOLD } from "../constants";
 import { bumpSeedViaRelayer } from "../relayer";
+
+const SEED_CONTEXT_REFRESH_INTERVAL_MS = 4_000;
 
 let workerId = 0;
 let role: WorkerRole = "explore";
 let rpcUrl = "";
 let contractId = "";
+let networkPassphrase = "";
 let relayerBaseUrl = "";
 let relayerApiKey: string | null = null;
 let running = false;
@@ -19,27 +22,42 @@ let bestConfig: AutopilotConfig = Autopilot.defaults();
 let globalBestConfig: AutopilotConfig = Autopilot.defaults(); // latest global best for warm restarts
 let gamesWithoutImprovement = 0;
 
-// Active seed_id cache
+// Chain-authoritative active seed context cache.
 let currentSeedId = -1;
 let currentSeed: number | null = null;
+let lastSeedContextCheckAt = 0;
 
 async function ensureSeed(): Promise<void> {
-  const seedId = Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
-  if (seedId === currentSeedId && currentSeed !== null) return;
-
-  // A new epoch started. Do not keep using stale epoch seed.
-  if (seedId !== currentSeedId) {
-    currentSeed = null;
+  const now = Date.now();
+  if (
+    currentSeed !== null &&
+    currentSeedId >= 0 &&
+    now - lastSeedContextCheckAt < SEED_CONTEXT_REFRESH_INTERVAL_MS
+  ) {
+    return;
   }
 
-  let fetched: number | null = null;
+  lastSeedContextCheckAt = now;
   let resolvedSeedId: number | null = null;
-  /* eslint-disable no-await-in-loop -- seed materialization retries must remain sequential */
+  let fetched: number | null = null;
+
+  /* eslint-disable no-await-in-loop -- seed authority retries must remain sequential */
   for (let attempt = 0; attempt < 6; attempt++) {
-    fetched = await fetchSeedFromContract(contractId, rpcUrl);
-    if (fetched !== null) {
-      resolvedSeedId = seedId;
-      break;
+    const context = await fetchSeedContextFromContract(
+      contractId,
+      rpcUrl,
+      networkPassphrase,
+    );
+    if (context !== null) {
+      resolvedSeedId = context.seedId;
+      if (resolvedSeedId !== currentSeedId) {
+        currentSeedId = resolvedSeedId;
+        currentSeed = null;
+      }
+      if (context.seed !== null) {
+        fetched = context.seed;
+        break;
+      }
     }
     if (attempt < 5) {
       await new Promise((r) => setTimeout(r, 5000));
@@ -47,30 +65,33 @@ async function ensureSeed(): Promise<void> {
   }
   /* eslint-enable no-await-in-loop */
 
+  // If chain authority cannot be resolved, stop using any cached seed rather
+  // than continuing to farm an epoch that may already be stale.
+  if (resolvedSeedId === null) {
+    currentSeed = null;
+    return;
+  }
+
   // Seed not yet materialized — worker 0 bumps it via the relayer (if configured),
-  // then waits briefly for the chain to confirm before retrying once.
+  // then uses only the chain-confirmed seed_id/seed returned after materialization.
   if (fetched === null && workerId === 0 && relayerApiKey) {
-    const bumped = await bumpSeedViaRelayer(contractId, rpcUrl, relayerBaseUrl, relayerApiKey);
-    if (bumped.success) {
-      if (bumped.seed !== null) {
-        fetched = bumped.seed;
-        resolvedSeedId = bumped.seedId ?? seedId;
-      } else {
-        await new Promise((r) => setTimeout(r, 3000));
-        fetched = await fetchSeedFromContract(contractId, rpcUrl);
-        if (fetched !== null) {
-          resolvedSeedId = seedId;
-        }
-      }
+    const bumped = await bumpSeedViaRelayer(
+      contractId,
+      rpcUrl,
+      networkPassphrase,
+      relayerBaseUrl,
+      relayerApiKey,
+    );
+    if (bumped.success && bumped.seed !== null && bumped.seedId !== null) {
+      fetched = bumped.seed;
+      resolvedSeedId = bumped.seedId;
     }
   }
 
-  if (fetched !== null) {
-    currentSeed = fetched;
-    currentSeedId = resolvedSeedId ?? seedId;
-  }
+  currentSeedId = resolvedSeedId;
+  currentSeed = fetched;
   // If still null after retries + relayer bump, runOneGame() will skip and
-  // retry — we never play games with an unmaterialized or stale seed.
+  // retry. We never play with an unresolved or locally-derived seed_id.
 }
 
 function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
@@ -175,6 +196,7 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
       role = msg.role;
       rpcUrl = msg.rpcUrl;
       contractId = msg.contractId;
+      networkPassphrase = msg.networkPassphrase;
       relayerBaseUrl = msg.relayerBaseUrl;
       relayerApiKey = msg.relayerApiKey;
       running = true;
@@ -189,9 +211,10 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
     case "reset-best":
       bestScore = 0;
       gamesWithoutImprovement = 0;
-      // Reset seed cache so the next game fetches the current seed_id's seed.
+      // Reset seed cache so the next game resolves chain authority again.
       currentSeedId = -1;
       currentSeed = null;
+      lastSeedContextCheckAt = 0;
       // On epoch reset, explorers warm-restart from the global best blended
       // with random so they search new territory with some learned structure.
       if (role === "explore") {
