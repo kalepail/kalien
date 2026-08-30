@@ -19,6 +19,7 @@ import { runCliPreflight } from "../preflight";
 const SEED_FETCH_TIMEOUT_MS = 6000;
 const SEED_REFRESH_INTERVAL_MS = 4000;
 const SEED_BUMP_RETRY_INTERVAL_MS = 30_000;
+const SEED_AUTHORITY_LEASE_MS = 20_000;
 
 function estimatedEpochEndMs(seedId: number): number {
   return (seedId + 1) * SEED_INTERVAL_SECONDS * 1000;
@@ -150,9 +151,15 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   let currentSeed: number | null = initialSeedContext.seed;
   let seedRefreshInFlight = false;
   let lastSeedRefreshAt = 0;
+  let lastSeedAuthorityAt = performance.now();
+  let seedAuthorityPaused = false;
   let seedBumpInFlight = false;
   let lastSeedBumpAt = 0;
   let announceSeedResolution = currentSeed === null;
+
+  function hasFreshSeedAuthority(now = performance.now()): boolean {
+    return now - lastSeedAuthorityAt <= SEED_AUTHORITY_LEASE_MS;
+  }
 
   async function fetchCurrentSeedContext(): Promise<SeedContext | null> {
     try {
@@ -197,16 +204,20 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   async function refreshCurrentSeed(force = false): Promise<SeedContext | null> {
     if (seedRefreshInFlight) return null;
 
-    const now = Date.now();
+    const now = performance.now();
     if (!force && now - lastSeedRefreshAt < SEED_REFRESH_INTERVAL_MS) {
-      return { seedId: currentEpoch, seed: currentSeed };
+      return hasFreshSeedAuthority(now) ? { seedId: currentEpoch, seed: currentSeed } : null;
     }
 
     seedRefreshInFlight = true;
     lastSeedRefreshAt = now;
     try {
       const context = await fetchCurrentSeedContext();
-      return context === null ? null : await materializeSeed(context);
+      if (context === null) {
+        return hasFreshSeedAuthority() ? { seedId: currentEpoch, seed: currentSeed } : null;
+      }
+      lastSeedAuthorityAt = performance.now();
+      return await materializeSeed(context);
     } finally {
       seedRefreshInFlight = false;
     }
@@ -273,6 +284,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     }
   }
 
+  function pauseForStaleSeedAuthority(): void {
+    if (seedAuthorityPaused) return;
+    seedAuthorityPaused = true;
+    currentSeed = null;
+    broadcastSeedContext({ seedId: currentEpoch, seed: null });
+    lastSubmitStatus = ansi.color(
+      ansi.yellow,
+      "chain seed authority stale — workers and submissions paused until refreshed",
+    );
+  }
+
   for (let i = 0; i < threadCount; i++) {
     const role = i === 0 ? "exploit" : "explore";
     const worker = isCompiled
@@ -287,8 +309,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           epochGamesPlayed++;
           break;
         case "new-best":
-          // Discard tapes from a stale chain seed_id.
-          if (msg.seedId !== currentEpoch) break;
+          // Accept work only while the main thread still has fresh chain authority.
+          if (!hasFreshSeedAuthority() || msg.seedId !== currentEpoch) break;
           if (msg.score > bestScore) {
             bestScore = msg.score;
             bestTape = msg.tape;
@@ -376,6 +398,10 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // Submit if we have an unsubmitted improvement
   async function doSubmit(force = false): Promise<void> {
     if (submitting || !bestTape || bestScore <= lastSubmittedScore) return;
+    if (!hasFreshSeedAuthority()) {
+      pauseForStaleSeedAuthority();
+      return;
+    }
 
     // Check submission budget
     if (epochSubmissions >= MAX_SUBMISSIONS_PER_EPOCH && !force) {
@@ -420,7 +446,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   const tickInterval = setInterval(async () => {
     const context = await refreshCurrentSeed();
 
-    if (context !== null && context.seedId !== currentEpoch) {
+    if (context === null) {
+      if (!hasFreshSeedAuthority()) {
+        pauseForStaleSeedAuthority();
+      }
+      return;
+    }
+
+    const authorityWasPaused = seedAuthorityPaused;
+    seedAuthorityPaused = false;
+
+    if (context.seedId !== currentEpoch) {
       // Drain loop: during doSubmit(), workers can still post new-best messages
       // that update bestScore/bestTape. Keep submitting until no unsubmitted
       // improvements remain so we never lose a late-arriving high score.
@@ -470,10 +506,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         }
         return undefined;
       });
-    } else if (context !== null && context.seed !== null && context.seed !== currentSeed) {
+    } else if (authorityWasPaused || context.seed !== currentSeed) {
       currentSeed = context.seed;
       broadcastSeedContext(context);
-      if (announceSeedResolution) {
+      if (authorityWasPaused) {
+        lastSubmitStatus = ansi.color(ansi.cyan, "chain seed authority refreshed");
+      }
+      if (context.seed !== null && announceSeedResolution) {
         lastSubmitStatus = ansi.color(
           ansi.cyan,
           `new seed_id materialized (0x${context.seed.toString(16).padStart(8, "0").toUpperCase()})`,
@@ -542,8 +581,10 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     /* eslint-disable no-await-in-loop, no-unmodified-loop-condition -- shutdown must wait for the current submit to finish before the final flush */
     while (submitting) await new Promise((r) => setTimeout(r, 100));
     /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
-    // Final submit if we have an unsubmitted improvement
-    if (bestTape && bestScore > lastSubmittedScore) {
+    // Final submit if we have an unsubmitted improvement and fresh chain authority.
+    if (!hasFreshSeedAuthority()) {
+      console.log(ansi.color(ansi.yellow, "  Final submit skipped: chain seed authority is stale."));
+    } else if (bestTape && bestScore > lastSubmittedScore) {
       console.log(ansi.color(ansi.yellow, `  Submitting best tape (score: ${bestScore})...`));
       const result = await submitTape(bestTape, opts.address, currentEpoch, opts.apiUrl);
       if (result.success) {
