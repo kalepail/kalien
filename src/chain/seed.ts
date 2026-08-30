@@ -1,4 +1,4 @@
-import { Address, xdr } from "@stellar/stellar-sdk";
+import { Address, rpc, xdr } from "@stellar/stellar-sdk";
 import { Client as ScoreClient } from "asteroids-score";
 
 export const SEED_INTERVAL_SECONDS = 600; // 10 minutes
@@ -120,10 +120,13 @@ export async function fetchSeedContextFromContract(
   networkPassphrase = resolveNetworkPassphrase(),
 ): Promise<SeedContext | null> {
   try {
+    const server = new rpc.Server(rpcUrl);
+    server.httpClient.defaults.timeout = SEED_FETCH_TIMEOUT_MS;
     const client = new ScoreClient({
       contractId,
       rpcUrl,
       networkPassphrase,
+      server,
     });
     const tx = await client.current_seed();
     const seedId = tx.result.seed_id >>> 0;
