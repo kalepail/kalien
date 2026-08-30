@@ -5,6 +5,11 @@ export const SEED_INTERVAL_SECONDS = 600; // 10 minutes
 const TESTNET_NETWORK_PASSPHRASE = "Test SDF Network ; September 2015";
 const SEED_FETCH_TIMEOUT_MS = 6_000;
 
+export interface SeedContext {
+  seedId: number;
+  seed: number | null;
+}
+
 function resolveNetworkPassphrase(): string {
   const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
   return viteEnv?.VITE_NETWORK_PASSPHRASE ?? TESTNET_NETWORK_PASSPHRASE;
@@ -74,7 +79,34 @@ export async function fetchSeedById(
 }
 
 /**
- * Read the materialized seed for the current epoch.
+ * Resolve the chain-authoritative current `seed_id`, then read only the exact
+ * materialized seed stored for that id.
+ *
+ * `current_seed()` is simulated only to obtain the ledger-time-derived id. Its
+ * speculative PRNG value is never trusted when storage has not been written.
+ */
+export async function fetchSeedContextFromContract(
+  contractId: string,
+  rpcUrl: string,
+  networkPassphrase = resolveNetworkPassphrase(),
+): Promise<SeedContext | null> {
+  try {
+    const client = new ScoreClient({
+      contractId,
+      rpcUrl,
+      networkPassphrase,
+    });
+    const tx = await client.current_seed();
+    const seedId = tx.result.seed_id >>> 0;
+    const seed = await fetchSeedById(contractId, rpcUrl, seedId);
+    return { seedId, seed };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the materialized seed for the chain-authoritative current seed window.
  *
  * Returns `null` when the seed has not been materialized on-chain yet
  * (callers should retry or trigger materialization via the relayer).
@@ -82,9 +114,10 @@ export async function fetchSeedById(
 export async function fetchSeedFromContract(
   contractId: string,
   rpcUrl: string,
+  networkPassphrase = resolveNetworkPassphrase(),
 ): Promise<number | null> {
-  const seedId = Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
-  return fetchSeedById(contractId, rpcUrl, seedId);
+  const context = await fetchSeedContextFromContract(contractId, rpcUrl, networkPassphrase);
+  return context?.seed ?? null;
 }
 
 /**
