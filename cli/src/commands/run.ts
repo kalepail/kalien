@@ -13,10 +13,12 @@ import {
   SETTLE_DELAY_MS,
 } from "../constants";
 import { fetchSeedContextFromContract, type SeedContext } from "@/chain/seed";
+import { bumpSeedViaRelayer } from "../relayer";
 import { runCliPreflight } from "../preflight";
 
 const SEED_FETCH_TIMEOUT_MS = 6000;
 const SEED_REFRESH_INTERVAL_MS = 4000;
+const SEED_BUMP_RETRY_INTERVAL_MS = 30_000;
 
 function estimatedEpochEndMs(seedId: number): number {
   return (seedId + 1) * SEED_INTERVAL_SECONDS * 1000;
@@ -148,6 +150,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   let currentSeed: number | null = initialSeedContext.seed;
   let seedRefreshInFlight = false;
   let lastSeedRefreshAt = 0;
+  let seedBumpInFlight = false;
+  let lastSeedBumpAt = 0;
   let announceSeedResolution = currentSeed === null;
 
   async function fetchCurrentSeedContext(): Promise<SeedContext | null> {
@@ -158,6 +162,35 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       ]);
     } catch {
       return null;
+    }
+  }
+
+  async function materializeSeed(context: SeedContext): Promise<SeedContext> {
+    if (
+      context.seed !== null ||
+      !opts.relayerApiKey ||
+      seedBumpInFlight ||
+      Date.now() - lastSeedBumpAt < SEED_BUMP_RETRY_INTERVAL_MS
+    ) {
+      return context;
+    }
+
+    seedBumpInFlight = true;
+    lastSeedBumpAt = Date.now();
+    try {
+      const bumped = await bumpSeedViaRelayer(
+        opts.contractId,
+        opts.rpcUrl,
+        opts.networkPassphrase,
+        opts.relayerBaseUrl,
+        opts.relayerApiKey,
+      );
+      if (bumped.success && bumped.seedId !== null && bumped.seed !== null) {
+        return { seedId: bumped.seedId, seed: bumped.seed };
+      }
+      return context;
+    } finally {
+      seedBumpInFlight = false;
     }
   }
 
@@ -173,17 +206,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     lastSeedRefreshAt = now;
     try {
       const context = await fetchCurrentSeedContext();
-      if (context?.seedId === currentEpoch && context.seed !== null) {
-        currentSeed = context.seed;
-        if (announceSeedResolution) {
-          lastSubmitStatus = ansi.color(
-            ansi.cyan,
-            `new seed_id materialized (0x${context.seed.toString(16).padStart(8, "0").toUpperCase()})`,
-          );
-          announceSeedResolution = false;
-        }
-      }
-      return context;
+      return context === null ? null : await materializeSeed(context);
     } finally {
       seedRefreshInFlight = false;
     }
@@ -237,6 +260,16 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         return;
       }
       throw error;
+    }
+  }
+
+  function broadcastSeedContext(context: SeedContext): void {
+    for (let i = 0; i < workers.length; i++) {
+      safePostToWorker(i, {
+        type: "seed-context",
+        seedId: context.seedId,
+        seed: context.seed,
+      });
     }
   }
 
@@ -304,11 +337,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       type: "start",
       workerId: i,
       role,
-      rpcUrl: opts.rpcUrl,
-      contractId: opts.contractId,
-      networkPassphrase: opts.networkPassphrase,
-      relayerBaseUrl: opts.relayerBaseUrl,
-      relayerApiKey: opts.relayerApiKey,
+      seedId: currentEpoch,
+      seed: currentSeed,
     });
   }
 
@@ -409,6 +439,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       currentEpoch = chainSeedId;
       currentSeed = context.seed;
       resetEpoch();
+      broadcastSeedContext(context);
       lastSubmitStatus = ansi.color(ansi.cyan, "new chain seed_id — fetching seed...");
       announceSeedResolution = currentSeed === null;
 
@@ -439,12 +470,16 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         }
         return undefined;
       });
-    }
-
-    // The active seed may not be materialized immediately. Keep polling chain
-    // authority until the exact SeedById(currentEpoch) entry appears.
-    if (currentSeed === null) {
-      void refreshCurrentSeed();
+    } else if (context !== null && context.seed !== null && context.seed !== currentSeed) {
+      currentSeed = context.seed;
+      broadcastSeedContext(context);
+      if (announceSeedResolution) {
+        lastSubmitStatus = ansi.color(
+          ansi.cyan,
+          `new seed_id materialized (0x${context.seed.toString(16).padStart(8, "0").toUpperCase()})`,
+        );
+        announceSeedResolution = false;
+      }
     }
 
     // Try to submit if we have a settled improvement
