@@ -1,5 +1,6 @@
-import { Address, rpc, xdr } from "@stellar/stellar-sdk";
+import { Address, xdr } from "@stellar/stellar-sdk";
 import { ChannelsClient } from "@openzeppelin/relayer-plugin-channels/dist/client";
+import { fetchSeedContextFromContract } from "@/chain/seed";
 
 export interface SeedBumpResult {
   success: boolean;
@@ -11,8 +12,6 @@ interface SorobanInvokePayload {
   func: string;
   auth: string[];
 }
-
-import { SEED_INTERVAL_SECONDS } from "./constants";
 
 function normalizeNonEmpty(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
@@ -50,37 +49,17 @@ async function submitInvokeViaRelayer(
   return null;
 }
 
-async function fetchSeedById(
-  contractId: string,
-  rpcUrl: string,
-  seedId: number,
-): Promise<number | null> {
-  const server = new rpc.Server(rpcUrl, {
-    allowHttp: rpcUrl.startsWith("http:"),
-  });
-  const key = xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("SeedById"), xdr.ScVal.scvU32(seedId)]);
-
-  try {
-    const entry = await server.getContractData(contractId, key, rpc.Durability.Temporary);
-    const value = entry.val.contractData().val();
-    if (value.switch().name !== "scvU32") {
-      return null;
-    }
-    return value.u32() >>> 0;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Trigger generation of the current epoch seed (10-minute seed_id interval):
+ * Trigger generation of the current chain-authoritative seed window:
  *   current_seed()
  *
- * Returns the resolved seed/seed_id on success.
+ * Returns only a seed/seed_id pair confirmed from contract storage after the
+ * relayed transaction. No local wall clock is used to select the id.
  */
 export async function bumpSeedViaRelayer(
   contractId: string,
   rpcUrl: string,
+  networkPassphrase: string,
   relayerBaseUrl: string,
   relayerApiKey: string,
 ): Promise<SeedBumpResult> {
@@ -100,34 +79,28 @@ export async function bumpSeedViaRelayer(
     const currentSeedPayload = buildInvokePayloadForContractFn(contractId, "current_seed", []);
     await submitInvokeViaRelayer(channelsClient, currentSeedPayload);
 
-    const nowSeedId = Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
-    const candidateSeedIds = nowSeedId > 0 ? [nowSeedId, nowSeedId - 1] : [nowSeedId];
-    let materializedSeedId: number | null = null;
-    let materializedSeed: number | null = null;
-
-    /* eslint-disable no-await-in-loop -- seed candidates must be checked in order */
-    for (const candidateSeedId of candidateSeedIds) {
-      const candidateSeed = await fetchSeedById(contractId, rpcUrl, candidateSeedId);
-      if (candidateSeed !== null) {
-        materializedSeedId = candidateSeedId;
-        materializedSeed = candidateSeed;
-        break;
+    /* eslint-disable no-await-in-loop -- materialization must be observed sequentially */
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const context = await fetchSeedContextFromContract(
+        contractId,
+        rpcUrl,
+        networkPassphrase,
+      );
+      if (context?.seed !== null && context?.seed !== undefined) {
+        return {
+          success: true,
+          seed: context.seed,
+          seedId: context.seedId,
+        };
+      }
+      if (attempt < 5) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
     /* eslint-enable no-await-in-loop */
 
-    if (materializedSeedId === null || materializedSeed === null) {
-      console.warn(
-        `[relayer] seed refresh failed: unable to read SeedById(seed_id) after current_seed; seed_ids=${candidateSeedIds.join(",")}`,
-      );
-      return { success: false, seed: null, seedId: null };
-    }
-
-    return {
-      success: true,
-      seed: materializedSeed,
-      seedId: materializedSeedId,
-    };
+    console.warn("[relayer] seed refresh failed: current chain seed did not materialize");
+    return { success: false, seed: null, seedId: null };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.warn(`[relayer] seed refresh failed: ${detail}`);
