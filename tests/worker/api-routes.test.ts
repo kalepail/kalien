@@ -1180,18 +1180,8 @@ describe("API routes", () => {
     expect(await response.text()).toBe('{"success":true}');
   });
 
-  it("DELETE /proofs/jobs/:jobId returns 404 when job does not exist", async () => {
-    const response = await requestApi(
-      "/proofs/jobs/job-missing",
-      {
-        method: "DELETE",
-      },
-      makeEnv(),
-    );
-    expect(response.status).toBe(404);
-  });
-
-  it("DELETE /proofs/jobs/:jobId marks job as failed when present", async () => {
+  it("DELETE /proofs/jobs/:jobId cannot mutate a public proof job", async () => {
+    let markFailedCalls = 0;
     const response = await requestApi(
       "/proofs/jobs/job-present",
       {
@@ -1199,14 +1189,23 @@ describe("API routes", () => {
       },
       makeEnv({
         __coordinator: makeCoordinatorStub({
-          markFailed: async () => ({
-            jobId: "job-present",
-            status: "failed",
-          }),
+          markFailed: async () => {
+            markFailedCalls += 1;
+            return {
+              jobId: "job-present",
+              status: "failed",
+            };
+          },
         }),
       }),
     );
-    expect(response.status).toBe(200);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET");
+    expect(markFailedCalls).toBe(0);
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain("cannot be cancelled");
   });
 
   it("POST /proofs/jobs/:jobId/retry-proof validates backend query param", async () => {
