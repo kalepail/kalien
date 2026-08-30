@@ -16,7 +16,6 @@ import { fetchSeedContextFromContract, type SeedContext } from "@/chain/seed";
 import { bumpSeedViaRelayer } from "../relayer";
 import { runCliPreflight } from "../preflight";
 
-const SEED_FETCH_TIMEOUT_MS = 6000;
 const SEED_REFRESH_INTERVAL_MS = 4000;
 const SEED_BUMP_RETRY_INTERVAL_MS = 30_000;
 const SEED_AUTHORITY_LEASE_MS = 20_000;
@@ -154,7 +153,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   let lastSeedAuthorityAt = performance.now();
   let seedAuthorityPaused = false;
   let seedBumpInFlight = false;
-  let lastSeedBumpAt = 0;
+  let lastSeedBumpAt = Number.NEGATIVE_INFINITY;
   let announceSeedResolution = currentSeed === null;
 
   function hasFreshSeedAuthority(now = performance.now()): boolean {
@@ -163,10 +162,11 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
   async function fetchCurrentSeedContext(): Promise<SeedContext | null> {
     try {
-      return await Promise.race<SeedContext | null>([
-        fetchSeedContextFromContract(opts.contractId, opts.rpcUrl, opts.networkPassphrase),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), SEED_FETCH_TIMEOUT_MS)),
-      ]);
+      return await fetchSeedContextFromContract(
+        opts.contractId,
+        opts.rpcUrl,
+        opts.networkPassphrase,
+      );
     } catch {
       return null;
     }
@@ -177,13 +177,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       context.seed !== null ||
       !opts.relayerApiKey ||
       seedBumpInFlight ||
-      Date.now() - lastSeedBumpAt < SEED_BUMP_RETRY_INTERVAL_MS
+      performance.now() - lastSeedBumpAt < SEED_BUMP_RETRY_INTERVAL_MS
     ) {
       return context;
     }
 
     seedBumpInFlight = true;
-    lastSeedBumpAt = Date.now();
+    lastSeedBumpAt = performance.now();
     try {
       const bumped = await bumpSeedViaRelayer(
         opts.contractId,
