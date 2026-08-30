@@ -613,25 +613,12 @@ export function createProofsRouter(): Hono<{ Bindings: WorkerEnv }> {
     });
   });
 
-  router.delete("/jobs/:jobId", async (c) => {
-    const jobId = c.req.param("jobId");
-    if (!jobId) {
-      return jsonError(c, 400, "invalid job id in path");
-    }
-
-    const coordinator = coordinatorStub(c.env);
-    try {
-      const failed = await coordinator.markFailed(jobId, "cancelled by api request");
-      if (!failed) {
-        return jsonError(c, 404, `job not found: ${jobId}`);
-      }
-      return c.json({
-        success: true,
-        job: asPublicJob(failed),
-      });
-    } catch (error) {
-      return jsonError(c, 409, safeErrorMessage(error));
-    }
+  // Job IDs are public capability-free identifiers, so they must never authorize
+  // destructive lifecycle changes. Cancellation can be reintroduced only with
+  // claimant-bound authentication or an unguessable per-job capability.
+  router.delete("/jobs/:jobId", (c) => {
+    c.header("Allow", "GET");
+    return jsonError(c, 405, "proof jobs cannot be cancelled through the public API");
   });
 
   router.post("/jobs/:jobId/retry-claim", async (c) => {
