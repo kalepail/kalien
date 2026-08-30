@@ -1,6 +1,6 @@
 import type { AutopilotConfig } from "../../../src/game/Autopilot";
 
-export type WorkerRole = "exploit" | "explore";
+export type WorkerRole = "explore" | "exploit";
 
 /** Messages from main thread -> worker */
 export type MainToWorkerMessage =
@@ -10,6 +10,7 @@ export type MainToWorkerMessage =
       role: WorkerRole;
       rpcUrl: string;
       contractId: string;
+      networkPassphrase: string;
       relayerBaseUrl: string;
       relayerApiKey: string | null;
     }
