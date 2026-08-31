@@ -25,6 +25,15 @@ function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
   postMessage(msg, transfer as any);
 }
 
+function resetLocalSearchForAuthorityTransition(): void {
+  bestScore = 0;
+  gamesWithoutImprovement = 0;
+  // Only configs received from the main thread are known to come from accepted
+  // work. Do not carry a self-found config across an authority break because
+  // its tape may have been rejected before this worker observed the transition.
+  bestConfig = role === "exploit" ? globalBestConfig : warmRestartConfig(globalBestConfig);
+}
+
 async function runOneGame(): Promise<void> {
   const seed = currentSeed;
   if (seed === null) {
@@ -144,13 +153,16 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
     case "stop":
       running = false;
       break;
-    case "seed-context":
-      if (currentSeedId !== msg.seedId || currentSeed !== msg.seed) {
+    case "seed-context": {
+      const authorityChanged = currentSeedId !== msg.seedId || currentSeed !== msg.seed;
+      if (authorityChanged) {
         seedContextGeneration++;
+        resetLocalSearchForAuthorityTransition();
       }
       currentSeedId = msg.seedId;
       currentSeed = msg.seed;
       break;
+    }
     case "reset-best":
       bestScore = 0;
       gamesWithoutImprovement = 0;
