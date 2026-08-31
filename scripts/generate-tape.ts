@@ -17,6 +17,10 @@ import { fetchSeedFromContract } from "../src/chain/seed";
 
 const DEFAULT_MAX_FRAMES = 36_000;
 const DEFAULT_RPC_URL = process.env.STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org";
+const DEFAULT_NETWORK_PASSPHRASE =
+  process.env.STELLAR_NETWORK_PASSPHRASE ??
+  process.env.VITE_NETWORK_PASSPHRASE ??
+  "Test SDF Network ; September 2015";
 const DEFAULT_CONTRACT_ID =
   process.env.SCORE_CONTRACT_ID ??
   process.env.VITE_SCORE_CONTRACT_ID ??
@@ -47,7 +51,11 @@ if (explicitSeed !== null) {
   let fetched: number | null = null;
   /* eslint-disable no-await-in-loop -- seed retries must remain sequential */
   for (let attempt = 0; attempt < 6; attempt++) {
-    fetched = await fetchSeedFromContract(DEFAULT_CONTRACT_ID, DEFAULT_RPC_URL);
+    fetched = await fetchSeedFromContract(
+      DEFAULT_CONTRACT_ID,
+      DEFAULT_RPC_URL,
+      DEFAULT_NETWORK_PASSPHRASE,
+    );
     if (fetched !== null) break;
     if (attempt < 5) {
       process.stdout.write(" retrying...");
