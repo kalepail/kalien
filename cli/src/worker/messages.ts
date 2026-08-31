@@ -10,9 +10,15 @@ export type MainToWorkerMessage =
       role: WorkerRole;
       seedId: number;
       seed: number | null;
+      authorityGeneration: number;
     }
   | { type: "stop" }
-  | { type: "seed-context"; seedId: number; seed: number | null }
+  | {
+      type: "seed-context";
+      seedId: number;
+      seed: number | null;
+      authorityGeneration: number;
+    }
   | { type: "reset-best" }
   | {
       type: "set-config";
@@ -38,5 +44,6 @@ export type WorkerToMainMessage =
       tape: Uint8Array;
       config: AutopilotConfig;
       seedId: number;
+      authorityGeneration: number;
     }
   | { type: "stopped"; workerId: number };
