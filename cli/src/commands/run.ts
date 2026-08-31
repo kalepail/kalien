@@ -148,6 +148,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   let currentEpoch = initialSeedId;
   let epochGamesPlayed = 0;
   let currentSeed: number | null = initialSeedContext.seed;
+  let seedAuthorityGeneration = 0;
   let seedRefreshInFlight = false;
   let lastSeedRefreshAt = 0;
   let lastSeedAuthorityAt = performance.now();
@@ -282,11 +283,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   }
 
   function broadcastSeedContext(context: SeedContext): void {
+    seedAuthorityGeneration++;
     for (let i = 0; i < workers.length; i++) {
       safePostToWorker(i, {
         type: "seed-context",
         seedId: context.seedId,
         seed: context.seed,
+        authorityGeneration: seedAuthorityGeneration,
       });
     }
   }
@@ -317,7 +320,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           break;
         case "new-best":
           // Accept work only while the main thread still has fresh chain authority.
-          if (!hasFreshSeedAuthority() || msg.seedId !== currentEpoch) break;
+          if (
+            !hasFreshSeedAuthority() ||
+            msg.seedId !== currentEpoch ||
+            msg.authorityGeneration !== seedAuthorityGeneration
+          ) {
+            break;
+          }
           if (msg.score > bestScore) {
             bestScore = msg.score;
             bestTape = msg.tape;
@@ -368,6 +377,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       role,
       seedId: currentEpoch,
       seed: currentSeed,
+      authorityGeneration: seedAuthorityGeneration,
     });
   }
 
