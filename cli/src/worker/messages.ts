@@ -47,3 +47,19 @@ export type WorkerToMainMessage =
       authorityGeneration: number;
     }
   | { type: "stopped"; workerId: number };
+
+export function isCurrentAuthorityResult(
+  result: Pick<
+    Extract<WorkerToMainMessage, { type: "new-best" }>,
+    "seedId" | "authorityGeneration"
+  >,
+  currentSeedId: number,
+  currentAuthorityGeneration: number,
+  authorityIsFresh: boolean,
+): boolean {
+  return (
+    authorityIsFresh &&
+    result.seedId === currentSeedId &&
+    result.authorityGeneration === currentAuthorityGeneration
+  );
+}
