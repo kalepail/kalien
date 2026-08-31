@@ -16,6 +16,9 @@ let gamesWithoutImprovement = 0;
 // Workers consume only the main thread's chain-authoritative seed context.
 let currentSeedId = -1;
 let currentSeed: number | null = null;
+// Increment on every real authority transition so an in-flight game cannot
+// become valid again merely because a paused worker recovers to the same seed.
+let seedContextGeneration = 0;
 
 function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Bun worker postMessage typing mismatch
@@ -37,6 +40,7 @@ async function runOneGame(): Promise<void> {
   const config = mutateConfig(bestConfig, scale, role);
 
   const seedId = currentSeedId;
+  const seedGeneration = seedContextGeneration;
   const game = new AsteroidsGame({
     headless: true,
     seed,
@@ -60,6 +64,18 @@ async function runOneGame(): Promise<void> {
   /* eslint-enable no-await-in-loop */
 
   const score = game.getScore();
+
+  // Authority may have paused, advanced, or recovered while this game was
+  // running. Never let work from an invalidated authority generation mutate
+  // worker best state, even if recovery returns to the same seed value.
+  if (seedGeneration !== seedContextGeneration) {
+    if (running) {
+      setTimeout(runOneGame, 0);
+    } else {
+      post({ type: "stopped", workerId });
+    }
+    return;
+  }
 
   if (score > bestScore) {
     const tape = game.getTape();
@@ -118,6 +134,7 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
       role = msg.role;
       currentSeedId = msg.seedId;
       currentSeed = msg.seed;
+      seedContextGeneration++;
       running = true;
       bestScore = 0;
       gamesWithoutImprovement = 0;
@@ -128,6 +145,9 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
       running = false;
       break;
     case "seed-context":
+      if (currentSeedId !== msg.seedId || currentSeed !== msg.seed) {
+        seedContextGeneration++;
+      }
       currentSeedId = msg.seedId;
       currentSeed = msg.seed;
       break;
