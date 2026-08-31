@@ -495,6 +495,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       }
       /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
 
+      // The drain can outlive the authority lease and yields to overlapping ticks.
+      // Recheck both freshness and monotonicity before this older callback can
+      // resume workers or replace a context that another tick already applied.
+      if (!hasFreshSeedAuthority()) {
+        pauseForStaleSeedAuthority();
+        return;
+      }
+      if (context.seedId <= currentEpoch) {
+        return;
+      }
+
       const chainSeedId = context.seedId;
       currentEpoch = chainSeedId;
       currentSeed = context.seed;
