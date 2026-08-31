@@ -5,7 +5,11 @@ import { renderDashboard, type DashboardStats } from "../display/dashboard";
 import * as ansi from "../display/ansi";
 import { submitTape, type SubmitResult } from "../api/submit";
 import { fetchPlayerScore } from "../api/score";
-import type { MainToWorkerMessage, WorkerToMainMessage } from "../worker/messages";
+import {
+  isCurrentAuthorityResult,
+  type MainToWorkerMessage,
+  type WorkerToMainMessage,
+} from "../worker/messages";
 import {
   type NetworkName,
   SEED_INTERVAL_SECONDS,
@@ -321,9 +325,12 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         case "new-best":
           // Accept work only while the main thread still has fresh chain authority.
           if (
-            !hasFreshSeedAuthority() ||
-            msg.seedId !== currentEpoch ||
-            msg.authorityGeneration !== seedAuthorityGeneration
+            !isCurrentAuthorityResult(
+              msg,
+              currentEpoch,
+              seedAuthorityGeneration,
+              hasFreshSeedAuthority(),
+            )
           ) {
             break;
           }
@@ -600,7 +607,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     /* eslint-enable no-await-in-loop, no-unmodified-loop-condition */
     // Final submit if we have an unsubmitted improvement and fresh chain authority.
     if (!hasFreshSeedAuthority()) {
-      console.log(ansi.color(ansi.yellow, "  Final submit skipped: chain seed authority is stale."));
+      console.log(
+        ansi.color(ansi.yellow, "  Final submit skipped: chain seed authority is stale."),
+      );
     } else if (bestTape && bestScore > lastSubmittedScore) {
       console.log(ansi.color(ansi.yellow, `  Submitting best tape (score: ${bestScore})...`));
       const result = await submitTape(bestTape, opts.address, currentEpoch, opts.apiUrl);
