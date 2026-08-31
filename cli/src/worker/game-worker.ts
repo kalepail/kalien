@@ -16,9 +16,7 @@ let gamesWithoutImprovement = 0;
 // Workers consume only the main thread's chain-authoritative seed context.
 let currentSeedId = -1;
 let currentSeed: number | null = null;
-// Increment on every real authority transition so an in-flight game cannot
-// become valid again merely because a paused worker recovers to the same seed.
-let seedContextGeneration = 0;
+let authorityGeneration = 0;
 
 function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Bun worker postMessage typing mismatch
@@ -49,7 +47,7 @@ async function runOneGame(): Promise<void> {
   const config = mutateConfig(bestConfig, scale, role);
 
   const seedId = currentSeedId;
-  const seedGeneration = seedContextGeneration;
+  const gameAuthorityGeneration = authorityGeneration;
   const game = new AsteroidsGame({
     headless: true,
     seed,
@@ -77,7 +75,7 @@ async function runOneGame(): Promise<void> {
   // Authority may have paused, advanced, or recovered while this game was
   // running. Never let work from an invalidated authority generation mutate
   // worker best state, even if recovery returns to the same seed value.
-  if (seedGeneration !== seedContextGeneration) {
+  if (gameAuthorityGeneration !== authorityGeneration) {
     if (running) {
       setTimeout(runOneGame, 0);
     } else {
@@ -102,6 +100,7 @@ async function runOneGame(): Promise<void> {
           tape: copy,
           config,
           seedId,
+          authorityGeneration: gameAuthorityGeneration,
         },
         [copy.buffer],
       );
@@ -143,7 +142,7 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
       role = msg.role;
       currentSeedId = msg.seedId;
       currentSeed = msg.seed;
-      seedContextGeneration++;
+      authorityGeneration = msg.authorityGeneration;
       running = true;
       bestScore = 0;
       gamesWithoutImprovement = 0;
@@ -154,13 +153,13 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
       running = false;
       break;
     case "seed-context": {
-      const authorityChanged = currentSeedId !== msg.seedId || currentSeed !== msg.seed;
+      const authorityChanged = authorityGeneration !== msg.authorityGeneration;
       if (authorityChanged) {
-        seedContextGeneration++;
         resetLocalSearchForAuthorityTransition();
       }
       currentSeedId = msg.seedId;
       currentSeed = msg.seed;
+      authorityGeneration = msg.authorityGeneration;
       break;
     }
     case "reset-best":
