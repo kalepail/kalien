@@ -120,7 +120,9 @@ export async function fetchSeedContextFromContract(
   networkPassphrase = resolveNetworkPassphrase(),
 ): Promise<SeedContext | null> {
   try {
-    const server = new rpc.Server(rpcUrl);
+    const server = new rpc.Server(rpcUrl, {
+      allowHttp: rpcUrl.startsWith("http:"),
+    });
     server.httpClient.defaults.timeout = SEED_FETCH_TIMEOUT_MS;
     const client = new ScoreClient({
       contractId,
