@@ -192,7 +192,12 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         opts.relayerBaseUrl,
         opts.relayerApiKey,
       );
-      if (bumped.success && bumped.seedId !== null && bumped.seed !== null) {
+      if (
+        bumped.success &&
+        bumped.seedId !== null &&
+        bumped.seed !== null &&
+        bumped.seedId >= context.seedId
+      ) {
         lastSeedAuthorityAt = performance.now();
         return { seedId: bumped.seedId, seed: bumped.seed };
       }
@@ -214,7 +219,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     lastSeedRefreshAt = now;
     try {
       const context = await fetchCurrentSeedContext();
-      if (context === null) {
+      if (context === null || context.seedId < currentEpoch) {
         return hasFreshSeedAuthority() ? { seedId: currentEpoch, seed: currentSeed } : null;
       }
       lastSeedAuthorityAt = performance.now();
