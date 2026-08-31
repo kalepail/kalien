@@ -1,6 +1,6 @@
 import type { AutopilotConfig } from "../../../src/game/Autopilot";
 
-export type WorkerRole = "exploit" | "explore";
+export type WorkerRole = "explore" | "exploit";
 
 /** Messages from main thread -> worker */
 export type MainToWorkerMessage =
@@ -8,12 +8,17 @@ export type MainToWorkerMessage =
       type: "start";
       workerId: number;
       role: WorkerRole;
-      rpcUrl: string;
-      contractId: string;
-      relayerBaseUrl: string;
-      relayerApiKey: string | null;
+      seedId: number;
+      seed: number | null;
+      authorityGeneration: number;
     }
   | { type: "stop" }
+  | {
+      type: "seed-context";
+      seedId: number;
+      seed: number | null;
+      authorityGeneration: number;
+    }
   | { type: "reset-best" }
   | {
       type: "set-config";
@@ -39,5 +44,22 @@ export type WorkerToMainMessage =
       tape: Uint8Array;
       config: AutopilotConfig;
       seedId: number;
+      authorityGeneration: number;
     }
   | { type: "stopped"; workerId: number };
+
+export function isCurrentAuthorityResult(
+  result: Pick<
+    Extract<WorkerToMainMessage, { type: "new-best" }>,
+    "seedId" | "authorityGeneration"
+  >,
+  currentSeedId: number,
+  currentAuthorityGeneration: number,
+  authorityIsFresh: boolean,
+): boolean {
+  return (
+    authorityIsFresh &&
+    result.seedId === currentSeedId &&
+    result.authorityGeneration === currentAuthorityGeneration
+  );
+}

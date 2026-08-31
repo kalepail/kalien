@@ -1,41 +1,45 @@
-# Seed Epoch Authority Gap (Deferred)
+# Seed Epoch Authority Gap
 
 ## Status
 
-Deferred for a follow-up implementation pass.
+Implemented in the chain-authoritative seed flow.
 
-Last reviewed: 2026-02-28
+Last reviewed: 2026-08-30
 
 ## Problem
 
-The CLI currently derives `seed_id` from local wall-clock time in multiple places.
-The score contract derives active seed windows from ledger time. This can drift near
-epoch boundaries or under host clock skew.
+The CLI previously let host time help choose `seed_id`. Centralizing chain reads fixes that only if cached authority cannot live forever after RPC disappears.
 
-## Why This Matters
+## Resolution
 
-- Can reduce liveness/throughput (skipped or dropped best tapes).
-- Can cause workers to farm a seed window that is already stale on-chain.
-- Does not bypass contract safety checks: invalid seed windows are rejected.
+The CLI now treats fresh chain evidence as the authority for seed-window selection:
 
-## Current Behavior References
+1. `current_seed()` simulation resolves the ledger-time-derived `seed_id`.
+2. The client reads only the exact materialized `SeedById(seed_id)` storage entry for the seed value.
+3. One main-thread poll owns `{ seedId, seed }`; worker-count growth adds no seed RPC traffic.
+4. Each successful chain observation renews a short monotonic freshness lease. Host time can expire evidence but cannot select a seed.
+5. If that lease expires, workers receive an unavailable seed, new worker bests are ignored, and submits—including shutdown flushes—pause until chain authority returns.
+6. Relayer materialization runs only through the main-thread authority path and re-resolves chain state.
+7. Local wall-clock seed math remains display/skew diagnostics only.
 
-- Worker local epoch derivation: `cli/cli-ts/src/worker/game-worker.ts`
-- CLI seed fetch helper uses local epoch: `src/chain/seed.ts`
-- Relayer fallback probes `now` and `now-1`: `cli/cli-ts/src/relayer.ts`
-- Run loop submit gating by epoch: `cli/cli-ts/src/commands/run.ts`
+## Safety Property
+
+A wrong host clock or a prolonged RPC outage cannot silently choose or indefinitely preserve the seed window used for new work. Current farming and submission authority must descend from recent chain evidence.
+
+## Implementation References
+
+- Chain seed context: `src/chain/seed.ts`
+- Worker seed handling: `cli/src/worker/game-worker.ts`
+- Relayer materialization confirmation: `cli/src/relayer.ts`
+- Freshness/submission gating: `cli/src/commands/run.ts`
 - Contract seed-window enforcement: `kalien-contract/contracts/asteroids_score/src/lib.rs`
 
-## Proposed Follow-Up
+## Acceptance Criteria
 
-1. Make chain/ledger time the source of truth for epoch selection in CLI.
-2. Resolve seed context as `{ seed_id, seed }` and propagate it end-to-end.
-3. Submit tapes with the resolved seed context, not recomputed local epoch.
-4. Keep a skew guardrail log/metric when local-vs-chain epoch delta is large.
-
-## Acceptance Criteria For Future Fix
-
-- No local wall-clock recomputation of submit `seed_id`.
-- Worker and submit path use the same resolved `seed_id`.
-- Boundary tests pass for epoch rollovers and `seed_id-1` fallback.
-- No dropped best-tape submissions caused solely by local/chain epoch mismatch.
+- No local wall-clock recomputation determines submit `seed_id`.
+- Worker and submit paths share one main-thread chain-resolved `seed_id`.
+- Seed refresh RPC traffic stays constant as worker count grows.
+- Relayer confirms materialization against chain-resolved context.
+- Clock skew is diagnostic only.
+- Lost chain authority becomes fail-closed after a bounded lease.
+- Recovered chain authority resumes workers from a newly confirmed context.
